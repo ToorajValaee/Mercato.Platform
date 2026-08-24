@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: mercato
+      POSTGRES_USER: mercato
+      POSTGRES_PASSWORD: mercato
+    ports:
+      - "5432:5432"
+    volumes:
+      - mercato_pgdata:/var/lib/postgresql/data
+
+volumes:
+  mercato_pgdata:
