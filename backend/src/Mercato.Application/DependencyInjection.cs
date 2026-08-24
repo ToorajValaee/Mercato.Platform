@@ -7,6 +7,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<Services.IProductService, Services.ProductServiceImplementation>();
+        services.AddScoped<Interfaces.IAuthService, Services.AuthService>();
 
         return services;
     }
