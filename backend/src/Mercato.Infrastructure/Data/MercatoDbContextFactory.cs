@@ -7,10 +7,13 @@ public class MercatoDbContextFactory : IDesignTimeDbContextFactory<MercatoDbCont
 {
     public MercatoDbContext CreateDbContext(string[] args)
     {
-        var options = new DbContextOptionsBuilder<MercatoDbContext>()
-            .UseNpgsql("Host=localhost;Database=mercato;Username=postgres;Password=postgres")
-            .Options;
+        var optionsBuilder = new DbContextOptionsBuilder<MercatoDbContext>();
 
-        return new MercatoDbContext(options);
+        var connectionString = Environment.GetEnvironmentVariable("MERCATO_CONNECTION_STRING")
+            ?? "Host=localhost;Port=5432;Database=mercato;Username=postgres;Password=postgres";
+
+        optionsBuilder.UseNpgsql(connectionString);
+
+        return new MercatoDbContext(optionsBuilder.Options);
     }
 }
