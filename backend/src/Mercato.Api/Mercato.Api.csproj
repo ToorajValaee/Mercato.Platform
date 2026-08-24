@@ -4,6 +4,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Mercato.Application/Mercato.Application.csproj" />
+    <ProjectReference Include="../Mercato.Infrastructure/Mercato.Infrastructure.csproj" />
     <ProjectReference Include="../Mercato.Domain/Mercato.Domain.csproj" />
   </ItemGroup>
 </Project>
