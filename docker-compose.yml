@@ -1,0 +1,8 @@
+services:
+  mercato-api:
+    build:
+      context: ./backend/src/Mercato.Api
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
