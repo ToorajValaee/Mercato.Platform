@@ -18,4 +18,10 @@ public sealed class UserRepository : IUserRepository
     {
         return _context.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
     }
+
+    public async Task AddAsync(User user, CancellationToken cancellationToken = default)
+    {
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }
