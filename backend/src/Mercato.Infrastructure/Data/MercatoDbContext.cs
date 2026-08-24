@@ -6,9 +6,7 @@ namespace Mercato.Infrastructure.Data;
 
 public class MercatoDbContext : DbContext
 {
-    public MercatoDbContext(DbContextOptions<MercatoDbContext> options) : base(options)
-    {
-    }
+    public MercatoDbContext(DbContextOptions<MercatoDbContext> options) : base(options) { }
 
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Category> Categories => Set<Category>();
@@ -21,6 +19,7 @@ public class MercatoDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<BranchInventoryDebt> BranchInventoryDebts => Set<BranchInventoryDebt>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,7 +34,6 @@ public class MercatoDbContext : DbContext
         modelBuilder.ApplyConfiguration(new OrderConfiguration());
         modelBuilder.ApplyConfiguration(new OrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new BranchInventoryDebtConfiguration());
-
         base.OnModelCreating(modelBuilder);
     }
 }
