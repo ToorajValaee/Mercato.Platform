@@ -1,3 +1,4 @@
+using Mercato.Application.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Mercato.Api.Controllers;
@@ -6,9 +7,17 @@ namespace Mercato.Api.Controllers;
 [Route("api/products")]
 public class ProductsController : ControllerBase
 {
-    [HttpGet]
-    public IActionResult Get()
+    private readonly IProductService _productService;
+
+    public ProductsController(IProductService productService)
     {
-        return Ok(Array.Empty<object>());
+        _productService = productService;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    {
+        var products = await _productService.GetProductsAsync(cancellationToken);
+        return Ok(products);
     }
 }
