@@ -14,9 +14,10 @@ public sealed class ProductServiceImplementation : IProductService
 
     public string ServiceName => "Product Management Service";
 
-    public Task<int> GetProductCountAsync(CancellationToken cancellationToken = default)
+    public async Task<int> GetProductCountAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(0);
+        var products = await _productRepository.GetAllAsync(cancellationToken);
+        return products.Count;
     }
 
     public Task<IReadOnlyList<ProductDto>> GetProductsAsync(
