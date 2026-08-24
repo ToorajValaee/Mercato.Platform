@@ -11,13 +11,16 @@ public class MercatoDbContext : DbContext
     }
 
     public DbSet<Product> Products => Set<Product>();
-    public DbSet<object> Categories => Set<object>();
-    public DbSet<object> Invoices => Set<object>();
-    public DbSet<object> StockMovements => Set<object>();
-    public DbSet<object> BranchTransfers => Set<object>();
-    public DbSet<object> SettlementLines => Set<object>();
-    public DbSet<object> Payments => Set<object>();
-    public DbSet<object> Customers => Set<object>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<BranchTransfer> BranchTransfers => Set<BranchTransfer>();
+    public DbSet<SettlementLine> SettlementLines => Set<SettlementLine>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<BranchInventoryDebt> BranchInventoryDebts => Set<BranchInventoryDebt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +30,11 @@ public class MercatoDbContext : DbContext
         modelBuilder.ApplyConfiguration(new StockMovementConfiguration());
         modelBuilder.ApplyConfiguration(new BranchTransferConfiguration());
         modelBuilder.ApplyConfiguration(new SettlementLineConfiguration());
+        modelBuilder.ApplyConfiguration(new PaymentConfiguration());
+        modelBuilder.ApplyConfiguration(new CustomerConfiguration());
+        modelBuilder.ApplyConfiguration(new OrderConfiguration());
+        modelBuilder.ApplyConfiguration(new OrderItemConfiguration());
+        modelBuilder.ApplyConfiguration(new BranchInventoryDebtConfiguration());
 
         base.OnModelCreating(modelBuilder);
     }
