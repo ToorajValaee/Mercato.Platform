@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Mercato.Domain.Entities;
 using Mercato.Infrastructure.Data.EntityConfigurations;
 
 namespace Mercato.Infrastructure.Data;
@@ -9,7 +10,7 @@ public class MercatoDbContext : DbContext
     {
     }
 
-    public DbSet<object> Products => Set<object>();
+    public DbSet<Product> Products => Set<Product>();
     public DbSet<object> Categories => Set<object>();
     public DbSet<object> Invoices => Set<object>();
     public DbSet<object> StockMovements => Set<object>();
