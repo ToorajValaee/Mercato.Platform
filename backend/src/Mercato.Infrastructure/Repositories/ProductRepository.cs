@@ -1,19 +1,36 @@
+using Microsoft.EntityFrameworkCore;
 using Mercato.Application.DTOs;
 using Mercato.Application.Repositories;
+using Mercato.Infrastructure.Data;
 
 namespace Mercato.Infrastructure.Repositories;
 
 public class ProductRepository : IProductRepository
 {
-    public Task<bool> ExistsAsync(Guid productId)
+    private readonly MercatoDbContext _context;
+
+    public ProductRepository(MercatoDbContext context)
     {
-        return Task.FromResult(false);
+        _context = context;
     }
 
-    public Task<IReadOnlyList<ProductDto>> GetAllAsync(
+    public async Task<bool> ExistsAsync(Guid productId)
+    {
+        return await _context.Products.AnyAsync(
+            x => x.Id == productId);
+    }
+
+    public async Task<IReadOnlyList<ProductDto>> GetAllAsync(
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<ProductDto> products = Array.Empty<ProductDto>();
-        return Task.FromResult(products);
+        return await _context.Products
+            .AsNoTracking()
+            .Select(product => new ProductDto(
+                product.Id,
+                product.Name,
+                product.PurchasePrice,
+                product.SalePrice,
+                product.CategoryId))
+            .ToListAsync(cancellationToken);
     }
 }
