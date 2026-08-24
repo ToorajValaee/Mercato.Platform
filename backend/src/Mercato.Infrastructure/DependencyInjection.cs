@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Mercato.Infrastructure.Data;
+using Mercato.Application.Repositories;
+using Mercato.Infrastructure.Repositories;
 
 namespace Mercato.Infrastructure;
 
@@ -10,6 +12,8 @@ public static class DependencyInjection
     {
         services.AddDbContext<MercatoDbContext>(options =>
             options.UseNpgsql(connectionString));
+
+        services.AddScoped<IProductRepository, ProductRepository>();
 
         return services;
     }
