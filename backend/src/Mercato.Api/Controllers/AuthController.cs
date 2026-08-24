@@ -1,8 +1,5 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
+using Mercato.Application.Interfaces;
 
 namespace Mercato.Api.Controllers;
 
@@ -10,42 +7,47 @@ namespace Mercato.Api.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
-    private readonly IConfiguration _configuration;
+    private readonly IAuthService _authService;
 
-    public AuthController(IConfiguration configuration)
+    public AuthController(IAuthService authService)
     {
-        _configuration = configuration;
+        _authService = authService;
     }
 
-    [HttpPost("login")]
-    public IActionResult Login([FromBody] LoginRequest request)
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
             return BadRequest();
 
-        var key = _configuration["Jwt:Key"];
-        if (string.IsNullOrWhiteSpace(key))
-            return Problem("JWT configuration missing");
-
-        var claims = new[]
+        try
         {
-            new Claim(JwtRegisteredClaimNames.Email, request.Email),
-            new Claim(ClaimTypes.Role, "User")
-        };
+            await _authService.RegisterAsync(request.Email, request.Password, cancellationToken);
+            return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(ex.Message);
+        }
+    }
 
-        var credentials = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
-            SecurityAlgorithms.HmacSha256);
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest();
 
-        var token = new JwtSecurityToken(
-            _configuration["Jwt:Issuer"],
-            _configuration["Jwt:Audience"],
-            claims,
-            expires: DateTime.UtcNow.AddHours(1),
-            signingCredentials: credentials);
-
-        return Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token) });
+        try
+        {
+            var token = await _authService.LoginAsync(request.Email, request.Password, cancellationToken);
+            return Ok(new { token });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized();
+        }
     }
 
     public record LoginRequest(string Email, string Password);
+    public record RegisterRequest(string Email, string Password);
 }
