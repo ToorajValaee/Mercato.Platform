@@ -9,6 +9,15 @@ public class MercatoDbContext : DbContext
     {
     }
 
+    public DbSet<object> Products => Set<object>();
+    public DbSet<object> Categories => Set<object>();
+    public DbSet<object> Invoices => Set<object>();
+    public DbSet<object> StockMovements => Set<object>();
+    public DbSet<object> BranchTransfers => Set<object>();
+    public DbSet<object> SettlementLines => Set<object>();
+    public DbSet<object> Payments => Set<object>();
+    public DbSet<object> Customers => Set<object>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
