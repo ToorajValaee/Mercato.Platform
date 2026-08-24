@@ -1,0 +1,8 @@
+using Mercato.Domain.Entities;
+
+namespace Mercato.Application.Repositories;
+
+public interface IUserRepository
+{
+    Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+}
