@@ -7,17 +7,29 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
 {
     private readonly IOrderService _orders;
     private readonly IInvoiceService _invoices;
+    private readonly IInventoryService _inventory;
 
-    public OrderCheckoutServiceImplementation(IOrderService orders, IInvoiceService invoices)
+    public OrderCheckoutServiceImplementation(
+        IOrderService orders,
+        IInvoiceService invoices,
+        IInventoryService inventory)
     {
         _orders = orders;
         _invoices = invoices;
+        _inventory = inventory;
     }
 
     public async Task<CheckoutResult> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Items.Count == 0)
             throw new InvalidOperationException("Checkout requires items.");
+
+        foreach (var item in request.Items)
+        {
+            var available = await _inventory.GetAvailableQuantityAsync(item.ProductId, request.BranchId);
+            if (available < item.Quantity)
+                throw new InvalidOperationException($"Insufficient stock for product {item.ProductId}.");
+        }
 
         var total = request.Items.Sum(x => x.Quantity * x.UnitPrice);
 
@@ -27,11 +39,21 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             TotalAmount = total
         }, cancellationToken);
 
+        foreach (var item in request.Items)
+        {
+            await _inventory.AdjustStockAsync(
+                item.ProductId,
+                request.BranchId,
+                -item.Quantity,
+                $"Checkout order {order.Id}");
+        }
+
         await _invoices.CreateAsync(new Invoice
         {
             CustomerId = request.CustomerId,
             BranchId = request.BranchId,
-            TotalAmount = total
+            TotalAmount = total,
+            CreatedAt = DateTime.UtcNow
         });
 
         return new CheckoutResult(true, $"Order {order.Id} created.");
