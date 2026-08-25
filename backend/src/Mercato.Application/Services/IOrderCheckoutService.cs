@@ -1,6 +1,8 @@
+using Mercato.Application.DTOs;
+
 namespace Mercato.Application.Services;
 
 public interface IOrderCheckoutService
 {
-    Task<object> CheckoutAsync(object request, CancellationToken cancellationToken = default);
+    Task<CheckoutResult> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default);
 }
