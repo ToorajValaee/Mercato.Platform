@@ -1,3 +1,4 @@
+using Mercato.Application.DTOs;
 using Mercato.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,5 +22,48 @@ public class ProductsController : ControllerBase
     {
         var products = await _productService.GetProductsAsync(cancellationToken);
         return Ok(products);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Create(
+        [FromBody] CreateProductRequest request,
+        CancellationToken cancellationToken)
+    {
+        var product = await _productService.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = product.Id }, product);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] UpdateProductRequest request,
+        CancellationToken cancellationToken)
+    {
+        var product = await _productService.UpdateAsync(id, request, cancellationToken);
+
+        if (product is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(product);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Archive(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var archived = await _productService.ArchiveAsync(id, cancellationToken);
+
+        if (!archived)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
     }
 }
