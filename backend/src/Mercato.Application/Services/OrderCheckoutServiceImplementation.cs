@@ -1,14 +1,17 @@
 using Mercato.Application.DTOs;
+using Mercato.Domain.Entities;
 
 namespace Mercato.Application.Services;
 
 public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
 {
     private readonly IOrderService _orders;
+    private readonly IInvoiceService _invoices;
 
-    public OrderCheckoutServiceImplementation(IOrderService orders)
+    public OrderCheckoutServiceImplementation(IOrderService orders, IInvoiceService invoices)
     {
         _orders = orders;
+        _invoices = invoices;
     }
 
     public async Task<CheckoutResult> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
@@ -18,17 +21,19 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
 
         var total = request.Items.Sum(x => x.Quantity * x.UnitPrice);
 
-        var order = await _orders.CreateAsync(new Mercato.Domain.Entities.Order
+        var order = await _orders.CreateAsync(new Order
         {
             BranchId = request.BranchId,
             TotalAmount = total
         }, cancellationToken);
 
-        return new CheckoutResult
+        await _invoices.CreateAsync(new Invoice
         {
-            OrderId = order.Id,
-            Total = total,
-            Status = "Created"
-        };
+            CustomerId = request.CustomerId,
+            BranchId = request.BranchId,
+            TotalAmount = total
+        });
+
+        return new CheckoutResult(true, $"Order {order.Id} created.");
     }
 }
