@@ -30,6 +30,12 @@ public class ProductsController : ControllerBase
         [FromBody] CreateProductRequest request,
         CancellationToken cancellationToken)
     {
+        var validation = ValidateProduct(request.Name, request.PurchasePrice, request.SalePrice);
+        if (validation is not null)
+        {
+            return BadRequest(new { error = validation });
+        }
+
         var product = await _productService.CreateAsync(request, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = product.Id }, product);
     }
@@ -41,6 +47,12 @@ public class ProductsController : ControllerBase
         [FromBody] UpdateProductRequest request,
         CancellationToken cancellationToken)
     {
+        var validation = ValidateProduct(request.Name, request.PurchasePrice, request.SalePrice);
+        if (validation is not null)
+        {
+            return BadRequest(new { error = validation });
+        }
+
         var product = await _productService.UpdateAsync(id, request, cancellationToken);
 
         if (product is null)
@@ -65,5 +77,25 @@ public class ProductsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    private static string? ValidateProduct(string name, decimal purchasePrice, decimal salePrice)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "Product name is required.";
+        }
+
+        if (purchasePrice < 0)
+        {
+            return "Purchase price cannot be negative.";
+        }
+
+        if (salePrice <= 0)
+        {
+            return "Sale price must be greater than zero.";
+        }
+
+        return null;
     }
 }
