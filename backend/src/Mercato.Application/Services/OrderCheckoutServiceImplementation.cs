@@ -1,3 +1,5 @@
+using Mercato.Application.DTOs;
+
 namespace Mercato.Application.Services;
 
 public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
@@ -14,7 +16,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         if (request.Items.Count == 0)
             throw new InvalidOperationException("Checkout requires items.");
 
-        var total = request.Items.Sum(x => x.Quantity * x.UnitPrice);
+        var total = request.Items.Sum(x => x.Quantity);
 
         var order = await _orders.CreateAsync(new Mercato.Domain.Entities.Order
         {
@@ -25,7 +27,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         return new CheckoutResult
         {
             OrderId = order.Id,
-            TotalAmount = total,
+            Total = total,
             Status = "Created"
         };
     }
