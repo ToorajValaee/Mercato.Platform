@@ -8,4 +8,10 @@ public interface IProductRepository
 
     Task<IReadOnlyList<ProductDto>> GetAllAsync(
         CancellationToken cancellationToken = default);
+
+    Task<ProductDto> AddAsync(ProductDto product, CancellationToken cancellationToken = default);
+
+    Task<ProductDto?> UpdateAsync(Guid id, UpdateProductRequest request, CancellationToken cancellationToken = default);
+
+    Task<bool> ArchiveAsync(Guid id, CancellationToken cancellationToken = default);
 }
