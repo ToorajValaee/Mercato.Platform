@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Mercato.Application.DTOs;
 using Mercato.Application.Repositories;
 using Mercato.Infrastructure.Data;
+using Mercato.Domain.Entities;
 
 namespace Mercato.Infrastructure.Repositories;
 
@@ -16,12 +17,10 @@ public class ProductRepository : IProductRepository
 
     public async Task<bool> ExistsAsync(Guid productId)
     {
-        return await _context.Products.AnyAsync(
-            x => x.Id == productId);
+        return await _context.Products.AnyAsync(x => x.Id == productId);
     }
 
-    public async Task<IReadOnlyList<ProductDto>> GetAllAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ProductDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Products
             .AsNoTracking()
@@ -32,5 +31,54 @@ public class ProductRepository : IProductRepository
                 product.SalePrice,
                 product.CategoryId))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<ProductDto> AddAsync(ProductDto product, CancellationToken cancellationToken = default)
+    {
+        var entity = new Product
+        {
+            Id = product.Id,
+            Name = product.Name,
+            PurchasePrice = product.PurchasePrice,
+            SalePrice = product.SalePrice,
+            CategoryId = product.CategoryId
+        };
+
+        _context.Products.Add(entity);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return product;
+    }
+
+    public async Task<ProductDto?> UpdateAsync(Guid id, UpdateProductRequest request, CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        entity.Name = request.Name;
+        entity.Sku = request.Sku;
+        entity.PurchasePrice = request.PurchasePrice;
+        entity.SalePrice = request.SalePrice;
+        entity.CategoryId = request.CategoryId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return new ProductDto(entity.Id, entity.Name, entity.PurchasePrice, entity.SalePrice, entity.CategoryId);
+    }
+
+    public async Task<bool> ArchiveAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        _context.Products.Remove(entity);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }
