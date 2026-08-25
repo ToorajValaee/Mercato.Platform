@@ -8,15 +8,18 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
     private readonly IOrderService _orders;
     private readonly IInvoiceService _invoices;
     private readonly IInventoryService _inventory;
+    private readonly ISettlementService _settlements;
 
     public OrderCheckoutServiceImplementation(
         IOrderService orders,
         IInvoiceService invoices,
-        IInventoryService inventory)
+        IInventoryService inventory,
+        ISettlementService settlements)
     {
         _orders = orders;
         _invoices = invoices;
         _inventory = inventory;
+        _settlements = settlements;
     }
 
     public async Task<CheckoutResult> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
@@ -55,6 +58,12 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             TotalAmount = total,
             CreatedAt = DateTime.UtcNow
         });
+
+        await _settlements.CreateAsync(new ArtistSettlement
+        {
+            TotalSalesCost = total,
+            IsPaid = false
+        }, cancellationToken);
 
         return new CheckoutResult(true, $"Order {order.Id} created.");
     }
