@@ -10,6 +10,8 @@ public static class DependencyInjection
         services.AddScoped<Services.IInventoryService, Services.InventoryServiceImplementation>();
         services.AddScoped<Interfaces.IAuthService, Services.AuthService>();
         services.AddScoped<Services.PasswordService>();
+        services.AddScoped<Services.IOrderService, Services.OrderServiceImplementation>();
+        services.AddScoped<Services.IOrderCheckoutService, Services.OrderCheckoutServiceImplementation>();
 
         return services;
     }
