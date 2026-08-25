@@ -1,0 +1,8 @@
+namespace Mercato.Application.DTOs;
+
+public record CreateProductRequest(
+    string Name,
+    string? Sku,
+    decimal PurchasePrice,
+    decimal SalePrice,
+    Guid? CategoryId);
