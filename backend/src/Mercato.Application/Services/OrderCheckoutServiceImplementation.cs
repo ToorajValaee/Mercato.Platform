@@ -16,7 +16,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         if (request.Items.Count == 0)
             throw new InvalidOperationException("Checkout requires items.");
 
-        var total = request.Items.Sum(x => x.Quantity);
+        var total = request.Items.Sum(x => x.Quantity * x.UnitPrice);
 
         var order = await _orders.CreateAsync(new Mercato.Domain.Entities.Order
         {
