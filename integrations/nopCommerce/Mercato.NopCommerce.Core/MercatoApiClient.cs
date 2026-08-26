@@ -4,6 +4,7 @@ using System.Text.Json;
 namespace Mercato.NopCommerce.Core;
 
 public sealed record MercatoConnectorOptions(string BaseUrl, string BearerToken);
+public sealed record MercatoBranch(Guid Id, string Name, string? Address);
 public sealed record CatalogProduct(Guid ProductId, string Name, string? Sku, decimal SalePrice, Guid? CategoryId, Guid? ArtistId, Guid? BranchId, int? AvailableQuantity)
 {
     public string NopSku => string.IsNullOrWhiteSpace(Sku) ? $"MERCATO-{ProductId:N}" : Sku.Trim();
@@ -25,6 +26,9 @@ public sealed class MercatoApiClient
 
     public async Task<bool> HealthAsync(CancellationToken cancellationToken = default)
         => (await _http.GetAsync("health", cancellationToken)).IsSuccessStatusCode;
+
+    public async Task<IReadOnlyList<MercatoBranch>> GetBranchesAsync(CancellationToken cancellationToken = default)
+        => await _http.GetFromJsonAsync<List<MercatoBranch>>("api/branches", cancellationToken) ?? [];
 
     public async Task<IReadOnlyList<CatalogProduct>> GetCatalogAsync(Guid? branchId = null, CancellationToken cancellationToken = default)
     {
