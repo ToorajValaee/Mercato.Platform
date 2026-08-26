@@ -7,7 +7,7 @@ namespace Mercato.Api.Controllers;
 
 [ApiController]
 [Route("api/pos")]
-[Authorize]
+[Authorize(Roles = "Admin,Manager,Cashier")]
 public sealed class PosController : ControllerBase
 {
     private readonly IOrderCheckoutService _checkout;
@@ -26,6 +26,10 @@ public sealed class PosController : ControllerBase
         {
             var result = await _checkout.CheckoutAsync(request, cancellationToken);
             return Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
         }
         catch (InvalidOperationException exception)
         {
