@@ -22,6 +22,7 @@ public sealed class NopStartup : INopStartup
         });
         services.AddScoped<INopProductGateway, NopProductGateway>();
         services.AddScoped<ProductSyncCore>();
+        services.AddScoped<ProductSyncTask>();
     }
 
     public void Configure(IApplicationBuilder application) { }
