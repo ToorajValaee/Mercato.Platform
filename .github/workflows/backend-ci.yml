@@ -13,13 +13,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Mercato
         uses: actions/checkout@v4
+
+      - name: Checkout nopCommerce 4.90.7
+        uses: actions/checkout@v4
+        with:
+          repository: nopSolutions/nopCommerce
+          ref: release-4.90.7
+          path: _nopCommerce
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: |
+            9.0.x
+            10.0.x
 
       - name: Restore backend
         run: dotnet restore backend/Mercato.Platform.sln
@@ -30,10 +39,19 @@ jobs:
       - name: Test backend
         run: dotnet test backend/Mercato.Platform.sln --configuration Release --no-build
 
-      - name: Build nopCommerce integration core
+      - name: Build nopCommerce integration cores
         run: |
           dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release
           dotnet build integrations/nopCommerce/Mercato.ProductSync.Plugin/Mercato.ProductSync.Plugin.csproj --configuration Release
           dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release
           dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release
           dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release
+
+      - name: Build nopCommerce 4.90.7 adapters
+        run: |
+          NOP_ROOT="${GITHUB_WORKSPACE}/_nopCommerce"
+          dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.ProductSync.Plugin/Mercato.ProductSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
