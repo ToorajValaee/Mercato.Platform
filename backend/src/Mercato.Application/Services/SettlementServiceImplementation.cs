@@ -40,7 +40,11 @@ public sealed class SettlementServiceImplementation : ISettlementService
         }, cancellationToken);
     }
 
-    public async Task CalculateAsync(Guid artistId, DateTime from, DateTime to)
+    public async Task<ArtistSettlement> CalculateAsync(
+        Guid artistId,
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default)
     {
         if (artistId == Guid.Empty)
             throw new ArgumentException("Artist is required.", nameof(artistId));
@@ -48,14 +52,56 @@ public sealed class SettlementServiceImplementation : ISettlementService
         if (to <= from)
             throw new ArgumentException("Settlement end date must be after start date.", nameof(to));
 
-        await _settlements.GetLinesAsync(artistId, from, to);
+        var existing = await _settlements.GetForPeriodAsync(
+            artistId,
+            from,
+            to,
+            cancellationToken);
+
+        if (existing is not null)
+            return existing;
+
+        var lines = await _settlements.GetLinesAsync(
+            artistId,
+            from,
+            to,
+            cancellationToken);
+
+        if (lines.Count == 0)
+            throw new InvalidOperationException("No artist sales were found for the requested settlement period.");
+
+        var settlement = new ArtistSettlement
+        {
+            Id = Guid.NewGuid(),
+            ArtistId = artistId,
+            PeriodFromUtc = from,
+            PeriodToUtc = to,
+            TotalSalesCost = lines.Sum(x => x.PurchaseAmount),
+            IsPaid = false,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        return await _settlements.AddSettlementAsync(settlement, cancellationToken);
     }
 
-    public Task<ArtistSettlement> CreateAsync(
-        ArtistSettlement settlement,
+    public Task<IReadOnlyList<ArtistSettlement>> GetSettlementsAsync(
+        Guid? artistId = null,
+        bool? isPaid = null,
         CancellationToken cancellationToken = default)
     {
-        settlement.Id = settlement.Id == Guid.Empty ? Guid.NewGuid() : settlement.Id;
-        return Task.FromResult(settlement);
+        return _settlements.GetSettlementsAsync(artistId, isPaid, cancellationToken);
+    }
+
+    public Task<ArtistSettlement?> MarkPaidAsync(
+        Guid settlementId,
+        CancellationToken cancellationToken = default)
+    {
+        if (settlementId == Guid.Empty)
+            throw new ArgumentException("Settlement is required.", nameof(settlementId));
+
+        return _settlements.MarkPaidAsync(
+            settlementId,
+            DateTime.UtcNow,
+            cancellationToken);
     }
 }
