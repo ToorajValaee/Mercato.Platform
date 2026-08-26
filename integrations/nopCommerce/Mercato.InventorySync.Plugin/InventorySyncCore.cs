@@ -4,7 +4,7 @@ namespace Mercato.InventorySync.Plugin;
 
 public interface INopInventoryGateway
 {
-    Task SetStockAsync(Guid productId, int quantity, CancellationToken cancellationToken = default);
+    Task SetStockAsync(CatalogProduct product, int quantity, CancellationToken cancellationToken = default);
 }
 
 public sealed class InventorySyncCore
@@ -23,7 +23,7 @@ public sealed class InventorySyncCore
         if (branchId == Guid.Empty) throw new ArgumentException("Branch is required.", nameof(branchId));
         var products = await _mercato.GetCatalogAsync(branchId, cancellationToken);
         foreach (var product in products)
-            await _nop.SetStockAsync(product.ProductId, product.AvailableQuantity ?? 0, cancellationToken);
+            await _nop.SetStockAsync(product, product.AvailableQuantity ?? 0, cancellationToken);
         return products.Count;
     }
 }
