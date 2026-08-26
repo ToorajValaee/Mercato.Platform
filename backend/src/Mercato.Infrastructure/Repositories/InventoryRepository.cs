@@ -14,20 +14,26 @@ public sealed class InventoryRepository : IInventoryRepository
         _context = context;
     }
 
-    public async Task<int> GetAvailableQuantityAsync(Guid branchId, Guid productId)
+    public async Task<int> GetAvailableQuantityAsync(
+        Guid branchId,
+        Guid productId,
+        CancellationToken cancellationToken = default)
     {
         var quantity = await _context.StockMovements
             .Where(x => x.BranchId == branchId && x.ProductId == productId)
-            .SumAsync(x => x.Quantity);
-
+            .SumAsync(x => x.Quantity, cancellationToken);
         return checked((int)quantity);
     }
 
-    public async Task AddMovementAsync(Guid branchId, Guid productId, int quantity, string movementType)
+    public async Task AddMovementAsync(
+        Guid branchId,
+        Guid productId,
+        int quantity,
+        string movementType,
+        CancellationToken cancellationToken = default)
     {
         if (branchId == Guid.Empty || productId == Guid.Empty)
             throw new ArgumentException("Branch and product are required for an inventory movement.");
-
         if (quantity == 0)
             throw new ArgumentOutOfRangeException(nameof(quantity));
 
@@ -40,7 +46,21 @@ public sealed class InventoryRepository : IInventoryRepository
             Type = string.IsNullOrWhiteSpace(movementType) ? "Adjustment" : movementType.Trim(),
             CreatedAtUtc = DateTime.UtcNow
         });
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 
-        await _context.SaveChangesAsync();
+    public async Task<IReadOnlyList<StockMovement>> GetMovementsAsync(
+        Guid? branchId = null,
+        Guid? productId = null,
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.StockMovements.AsNoTracking().AsQueryable();
+        if (branchId is Guid branch && branch != Guid.Empty) query = query.Where(x => x.BranchId == branch);
+        if (productId is Guid product && product != Guid.Empty) query = query.Where(x => x.ProductId == product);
+        if (fromUtc is DateTime from) query = query.Where(x => x.CreatedAtUtc >= from);
+        if (toUtc is DateTime to) query = query.Where(x => x.CreatedAtUtc < to);
+        return await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
     }
 }
