@@ -10,6 +10,7 @@ public class MercatoDbContext : DbContext
 
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Artist> Artists => Set<Artist>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<BranchTransfer> BranchTransfers => Set<BranchTransfer>();
