@@ -1,4 +1,4 @@
-using Nop.Core.Domain.Tasks;
+using Nop.Core.Domain.ScheduleTasks;
 using Nop.Services.Plugins;
 using Nop.Services.ScheduleTasks;
 
