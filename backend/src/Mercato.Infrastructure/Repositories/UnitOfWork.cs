@@ -32,6 +32,7 @@ public sealed class UnitOfWork : IUnitOfWork
         catch
         {
             await transaction.RollbackAsync(cancellationToken);
+            _context.ChangeTracker.Clear();
             throw;
         }
     }
