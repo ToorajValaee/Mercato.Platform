@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup Condition="'$(NopCommerceRoot)' == ''">
     <Compile Remove="NopPlugin.cs" />
+    <Compile Remove="NopStartup.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="plugin.json" CopyToOutputDirectory="PreserveNewest" />
