@@ -20,6 +20,20 @@ public class ProductRepository : IProductRepository
         return await _context.Products.AnyAsync(x => x.Id == productId);
     }
 
+    public async Task<ProductDto?> GetByIdAsync(Guid productId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Products
+            .AsNoTracking()
+            .Where(product => product.Id == productId)
+            .Select(product => new ProductDto(
+                product.Id,
+                product.Name,
+                product.PurchasePrice,
+                product.SalePrice,
+                product.CategoryId))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ProductDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Products
