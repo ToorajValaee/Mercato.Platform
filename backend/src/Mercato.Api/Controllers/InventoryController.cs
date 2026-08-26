@@ -1,3 +1,4 @@
+using Mercato.Application.DTOs;
 using Mercato.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,38 +8,76 @@ namespace Mercato.Api.Controllers;
 [ApiController]
 [Route("api/inventory")]
 [Authorize]
-public class InventoryController : ControllerBase
+public sealed class InventoryController : ControllerBase
 {
-    private readonly IInventoryService _inventoryService;
+    private readonly IInventoryService _inventory;
+    private readonly IBranchTransferService _transfers;
 
-    public InventoryController(IInventoryService inventoryService)
+    public InventoryController(IInventoryService inventory, IBranchTransferService transfers)
     {
-        _inventoryService = inventoryService;
+        _inventory = inventory;
+        _transfers = transfers;
     }
 
     [HttpGet("{productId:guid}/{branchId:guid}")]
-    public async Task<IActionResult> Get(Guid productId, Guid branchId)
+    public async Task<IActionResult> Get(Guid productId, Guid branchId, CancellationToken cancellationToken)
     {
-        var quantity = await _inventoryService.GetAvailableQuantityAsync(productId, branchId);
-        return Ok(new { productId, branchId, quantity });
+        try
+        {
+            var quantity = await _inventory.GetAvailableQuantityAsync(productId, branchId, cancellationToken);
+            return Ok(new { productId, branchId, quantity });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return NotFound(new { error = exception.Message });
+        }
+    }
+
+    [HttpGet("movements")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> GetMovements(
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? productId,
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toUtc,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _inventory.GetMovementsAsync(branchId, productId, fromUtc, toUtc, cancellationToken));
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
     }
 
     [HttpPost("adjust")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<IActionResult> Adjust([FromBody] InventoryAdjustmentRequest request)
+    public async Task<IActionResult> Adjust([FromBody] InventoryAdjustmentRequest request, CancellationToken cancellationToken)
     {
-        await _inventoryService.AdjustStockAsync(request.ProductId, request.BranchId, request.Quantity, request.Reason);
-        return NoContent();
+        try
+        {
+            await _inventory.AdjustStockAsync(request.ProductId, request.BranchId, request.Quantity, request.Reason, cancellationToken);
+            return NoContent();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
     }
 
     [HttpPost("transfer")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<IActionResult> Transfer([FromBody] InventoryTransferRequest request)
+    public async Task<IActionResult> Transfer([FromBody] CreateBranchTransferRequest request, CancellationToken cancellationToken)
     {
-        await _inventoryService.TransferStockAsync(request.ProductId, request.FromBranchId, request.ToBranchId, request.Quantity);
-        return NoContent();
+        try
+        {
+            return Ok(await _transfers.CreateAsync(request, cancellationToken));
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
     }
-
-    public sealed record InventoryAdjustmentRequest(Guid ProductId, Guid BranchId, decimal Quantity, string Reason);
-    public sealed record InventoryTransferRequest(Guid ProductId, Guid FromBranchId, Guid ToBranchId, decimal Quantity);
 }
