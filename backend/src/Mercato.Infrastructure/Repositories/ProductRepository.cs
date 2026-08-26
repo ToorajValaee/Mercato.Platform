@@ -15,39 +15,20 @@ public class ProductRepository : IProductRepository
         _context = context;
     }
 
-    public async Task<bool> ExistsAsync(Guid productId)
-    {
-        return await _context.Products.AnyAsync(x => x.Id == productId);
-    }
+    public Task<bool> ExistsAsync(Guid productId)
+        => _context.Products.AnyAsync(x => x.Id == productId);
 
     public async Task<ProductDto?> GetByIdAsync(Guid productId, CancellationToken cancellationToken = default)
-    {
-        return await _context.Products
-            .AsNoTracking()
+        => await _context.Products.AsNoTracking()
             .Where(product => product.Id == productId)
-            .Select(product => new ProductDto(
-                product.Id,
-                product.Name,
-                product.PurchasePrice,
-                product.SalePrice,
-                product.CategoryId,
-                product.ArtistId))
+            .Select(product => Map(product))
             .FirstOrDefaultAsync(cancellationToken);
-    }
 
     public async Task<IReadOnlyList<ProductDto>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        return await _context.Products
-            .AsNoTracking()
-            .Select(product => new ProductDto(
-                product.Id,
-                product.Name,
-                product.PurchasePrice,
-                product.SalePrice,
-                product.CategoryId,
-                product.ArtistId))
+        => await _context.Products.AsNoTracking()
+            .OrderBy(product => product.Name)
+            .Select(product => Map(product))
             .ToListAsync(cancellationToken);
-    }
 
     public async Task<ProductDto> AddAsync(ProductDto product, CancellationToken cancellationToken = default)
     {
@@ -55,25 +36,21 @@ public class ProductRepository : IProductRepository
         {
             Id = product.Id,
             Name = product.Name,
+            Sku = product.Sku,
             PurchasePrice = product.PurchasePrice,
             SalePrice = product.SalePrice,
             CategoryId = product.CategoryId,
             ArtistId = product.ArtistId
         };
-
         _context.Products.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
-
-        return product;
+        return Map(entity);
     }
 
     public async Task<ProductDto?> UpdateAsync(Guid id, UpdateProductRequest request, CancellationToken cancellationToken = default)
     {
         var entity = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (entity is null)
-        {
-            return null;
-        }
+        if (entity is null) return null;
 
         entity.Name = request.Name;
         entity.Sku = request.Sku;
@@ -81,28 +58,25 @@ public class ProductRepository : IProductRepository
         entity.SalePrice = request.SalePrice;
         entity.CategoryId = request.CategoryId;
         entity.ArtistId = request.ArtistId;
-
         await _context.SaveChangesAsync(cancellationToken);
-
-        return new ProductDto(
-            entity.Id,
-            entity.Name,
-            entity.PurchasePrice,
-            entity.SalePrice,
-            entity.CategoryId,
-            entity.ArtistId);
+        return Map(entity);
     }
 
     public async Task<bool> ArchiveAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var entity = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (entity is null)
-        {
-            return false;
-        }
-
+        if (entity is null) return false;
         _context.Products.Remove(entity);
         await _context.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    private static ProductDto Map(Product product) => new(
+        product.Id,
+        product.Name,
+        product.Sku,
+        product.PurchasePrice,
+        product.SalePrice,
+        product.CategoryId,
+        product.ArtistId);
 }
