@@ -6,6 +6,8 @@ public interface IProductRepository
 {
     Task<bool> ExistsAsync(Guid productId);
 
+    Task<ProductDto?> GetByIdAsync(Guid productId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ProductDto>> GetAllAsync(
         CancellationToken cancellationToken = default);
 
