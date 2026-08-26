@@ -1,13 +1,13 @@
 # Mercato Platform Specification
 
-Version: 1.0
-Purpose: Source of truth for product requirements, business flows, architecture decisions, and remaining development work.
+Version: 1.1
+Purpose: Source of truth for product requirements, business flows, architecture decisions, implementation status, known gaps, and remaining development work.
 
 ## 1. Vision
 
-Mercato is an ERP and business operating platform. It owns the business logic, inventory, products, branches, artists, accounting, POS, and settlement capabilities.
+Mercato is the ERP and business operating platform. It owns business logic, inventory, products, branches, artists, accounting, POS, catalog generation, and settlement capabilities.
 
-nopCommerce is used as the external commerce engine.
+nopCommerce is the external commerce engine.
 
 ## 2. Responsibility Boundary
 
@@ -30,13 +30,13 @@ nopCommerce is used as the external commerce engine.
 - Storefront
 - SEO
 - Cart
-- Checkout
+- Checkout UI
 - Payment gateways
 - Shipping providers
 
 ## 3. Target Architecture
 
-```
+```text
 Mercato.Api
     |
 Mercato.Application
@@ -56,6 +56,8 @@ Business modules:
 - NopCommerce integration
 ```
 
+The current implementation uses a consolidated Clean Architecture solution rather than separate .NET projects for each business module. Do not split modules into separate projects unless a concrete technical need appears.
+
 ## 4. Customer UX Flow
 
 ### Online customer
@@ -68,8 +70,8 @@ Business modules:
 6. nopCommerce manages cart and checkout.
 7. Order is synchronized back to Mercato.
 8. Mercato updates inventory.
-9. Accounting receives transaction.
-10. Artist settlement is calculated.
+9. Accounting receives the transaction.
+10. Artist settlement data is generated when the sold product belongs to an artist.
 
 ## 5. POS UX Flow
 
@@ -77,17 +79,21 @@ Business modules:
 
 1. Staff logs into POS.
 2. Select branch.
-3. Search products.
-4. Check inventory.
-5. Create customer sale.
-6. Process payment.
-7. Reduce inventory.
-8. Generate accounting records.
-9. Update artist settlement data.
+3. Search or scan products.
+4. Check branch inventory.
+5. Add products to cart.
+6. Checkout using server-authoritative product prices.
+7. Persist Order and OrderItems.
+8. Reduce inventory.
+9. Persist Invoice linked to the Order.
+10. Record artist settlement lines using product purchase cost.
+11. Process/record payment.
+12. Post accounting transaction.
+13. Return receipt details.
 
 ## 6. Core Business Modules
 
-## Inventory Engine
+### Inventory Engine
 
 Requirements:
 
@@ -96,18 +102,25 @@ Requirements:
 - Availability calculation
 - Reservation support
 - Stock movement history
+- Branch transfers
+- Sale deductions through inventory ledger/services
 
-## Products
+### Products
 
 Requirements:
 
 - Product master data
-- Pricing
+- SKU
+- Purchase price
+- Sale price
 - Categories
+- Optional artist ownership
 - Images
 - Synchronization to storefront
 
-## Branches
+Business rule: POS and integrations must not trust sale price supplied by clients. Mercato resolves authoritative pricing from product data.
+
+### Branches
 
 Requirements:
 
@@ -115,34 +128,43 @@ Requirements:
 - Branch inventory ownership
 - Branch selection logic
 
-## Artists
+### Artists
 
 Requirements:
 
 - Artist profiles
-- Product ownership
-- Revenue attribution
-- Settlement calculation
+- Optional product ownership (`Product.ArtistId`)
+- Purchase-cost based settlement tracking
+- Settlement reporting and payment status
 
-## Accounting
+Business rule: artist products are tracked by purchase cost, not revenue-sharing percentage. On sale, settlement data records `PurchasePrice × QuantitySold` for the product's artist.
+
+### Accounting
 
 Requirements:
 
 - Sales records
 - Invoices
-- Transactions
+- Accounting transactions/journal postings
+- Payment records
 - Financial reports
 
-## POS
+### POS
 
 Requirements:
 
 - Fast sales workflow
 - Branch operation
-- Offline-ready consideration
+- Server-authoritative pricing
 - Inventory integration
+- Order and line-item persistence
+- Invoice creation
+- Artist settlement recording
+- Payment handling
+- Receipt response
+- Offline-ready consideration
 
-## Catalog
+### Catalog
 
 Requirements:
 
@@ -156,7 +178,7 @@ The plugins are integration modules, not generic extensions.
 
 Structure:
 
-```
+```text
 Mercato.NopCommerce
  |
  |- Mercato.Connector.Plugin
@@ -200,8 +222,8 @@ Responsibilities:
 
 Responsibilities:
 
-- Send orders from nopCommerce to Mercato
-- Trigger accounting and settlement flows
+- Send completed nopCommerce orders to Mercato
+- Trigger Mercato inventory, accounting, and settlement flows
 
 ## 8. Development Audit Rules
 
@@ -211,28 +233,72 @@ Before considering the platform complete, verify:
 - Every module has domain, application, infrastructure, and API support where needed.
 - No business rule exists only in the storefront.
 - Inventory remains owned by Mercato.
-- Accounting receives all required events.
-- Settlement receives artist attribution data.
+- Product pricing remains authoritative in Mercato.
+- Accounting receives all sale/payment events.
+- Settlement receives valid artist/product/order attribution.
+- Financial records are persisted, not only returned in memory.
+- End-to-end flows are transactionally safe.
 
-## 9. Current Known Repository Gap Analysis
+## 9. Current Implementation Status
 
-Known existing foundation:
+### POS checkout backend
 
-- API layer
-- Domain layer
-- Application layer
-- Infrastructure layer
+Implemented:
 
-Expected modules requiring verification/completion:
+- [x] Checkout request contract
+- [x] Server-side stock validation
+- [x] Server-side product price resolution
+- [x] Order creation
+- [x] OrderItem creation and persistence
+- [x] Inventory deduction
+- [x] Invoice creation and persistence
+- [x] Invoice-to-Order link
+- [x] Product-to-Artist ownership field
+- [x] Purchase-cost settlement line persistence
+- [x] POS checkout API endpoint: `POST /api/pos/checkout`
+- [x] Typed checkout result with OrderId, InvoiceId, Total, Status
 
-- Inventory module
-- Products module
-- Branches module
-- Artists module
-- Accounting module
-- POS module
-- Catalog module
-- NopCommerce plugins
+Still required:
+
+- [ ] Transaction boundary across order, stock, invoice, settlement, payment, and accounting
+- [ ] Payment capture/recording in POS workflow
+- [ ] Accounting transaction posting from checkout
+- [ ] Receipt number/model and printable receipt payload
+- [ ] POS-specific authorization roles/policies
+- [ ] Customer optionality/guest sale rules verification
+
+### Artist settlement
+
+Implemented:
+
+- [x] Product may reference an Artist
+- [x] SettlementLine records OrderId, ArtistId, ProductId, QuantitySold, PurchaseAmount
+- [x] Checkout records purchase-cost settlement lines only for artist-owned products
+- [x] Settlement lines are persisted through EF repository
+
+Still required:
+
+- [ ] Settlement period aggregation
+- [ ] Persist ArtistSettlement summaries
+- [ ] Paid/unpaid settlement workflow
+- [ ] Settlement API completion
+- [ ] Settlement reports
+
+### Known technical issues discovered during development
+
+Resolved:
+
+- [x] Product EF mapping referenced a nonexistent `Price` property; now maps PurchasePrice and SalePrice.
+- [x] SettlementLine EF mapping referenced a nonexistent `Amount` property; now maps PurchaseAmount.
+- [x] Order and Invoice services previously returned in-memory objects without persistence; repository-backed persistence has been introduced.
+- [x] Checkout previously trusted client UnitPrice; authoritative SalePrice is now loaded from Mercato product data.
+- [x] Checkout previously generated invalid settlement summaries without a valid ArtistId; checkout now records attributable settlement lines instead.
+
+To verify later:
+
+- [ ] Database migrations match the current domain model.
+- [ ] Build succeeds after all development batches are complete.
+- [ ] Existing database schema migration strategy for new ArtistId and SettlementLine.OrderId fields.
 
 ## 10. Remaining Work List
 
@@ -241,9 +307,10 @@ Expected modules requiring verification/completion:
 - [ ] Complete Inventory Engine
 - [ ] Complete Product module
 - [ ] Complete Branch module
-- [ ] Complete Artist module
+- [ ] Complete Artist management module
 - [ ] Complete Accounting module
-- [ ] Complete POS module
+- [ ] Complete POS payment/accounting/receipt workflow
+- [ ] Complete artist settlement aggregation/payment workflow
 - [ ] Complete Catalog generator
 - [ ] Complete nopCommerce connector plugin
 - [ ] Complete product sync plugin
@@ -257,12 +324,34 @@ Expected modules requiring verification/completion:
 
 - [ ] Add unit tests
 - [ ] Add integration tests
+- [ ] Add/fix API tests
 - [ ] Fix CI pipeline
 - [ ] Docker deployment verification
 - [ ] Production readiness review
 
-## 11. Update Policy
+## 11. Knowledge / Unknowns
 
-This document must be updated whenever a feature is completed or architecture changes.
+Known:
 
-It is intended to be usable by future developers and AI agents as the reference source of requirements.
+- Mercato is the business authority.
+- nopCommerce is the commerce/storefront authority only for storefront, SEO, cart, checkout UI, payments, and shipping integrations.
+- Inventory is ledger/service driven in Mercato.
+- Artist settlement uses purchase cost, not revenue sharing.
+- POS checkout must use server-side prices.
+
+Unknown or requiring explicit later decision:
+
+- Final supported POS payment methods.
+- Tax calculation rules and tax jurisdiction behavior.
+- Discount/coupon authority for POS.
+- Receipt numbering format and fiscal/legal requirements.
+- Whether anonymous/guest POS customers are represented by `Guid.Empty`, nullable customer IDs, or a system customer.
+- Settlement payment schedule and approval workflow.
+- Accounting chart of accounts and posting rules.
+- Exact nopCommerce version targeted by the plugins.
+
+## 12. Update Policy
+
+This document must be updated whenever a feature is completed, business rule changes, architecture changes, or an important unknown is resolved.
+
+It is intended to be usable by future developers and AI agents as the reference source for requirements, implementation status, business rules, and remaining work.
