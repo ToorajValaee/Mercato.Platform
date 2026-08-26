@@ -28,6 +28,14 @@ public sealed class CheckoutIdempotencyRepository : ICheckoutIdempotencyReposito
         CancellationToken cancellationToken = default)
     {
         _context.CheckoutIdempotencyRecords.Add(record);
-        await _context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            throw new CheckoutIdempotencyConflictException(record.IdempotencyKey, exception);
+        }
     }
 }
