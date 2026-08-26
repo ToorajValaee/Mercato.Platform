@@ -1,0 +1,11 @@
+{
+  "Group": "Mercato",
+  "FriendlyName": "Mercato Connector",
+  "SystemName": "Mercato.Connector",
+  "Version": "4.90.7.1",
+  "SupportedVersions": [ "4.90" ],
+  "Author": "Tooraj Valaee",
+  "DisplayOrder": 1,
+  "FileName": "Nop.Plugin.Mercato.Connector.dll",
+  "Description": "Base Mercato API connectivity, authentication, configuration, and health integration."
+}
