@@ -18,6 +18,7 @@ public class MercatoDbContext : DbContext
     public DbSet<ArtistSettlement> ArtistSettlements => Set<ArtistSettlement>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<AccountingTransaction> AccountingTransactions => Set<AccountingTransaction>();
+    public DbSet<CheckoutIdempotencyRecord> CheckoutIdempotencyRecords => Set<CheckoutIdempotencyRecord>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
@@ -35,6 +36,7 @@ public class MercatoDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ArtistSettlementConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentConfiguration());
         modelBuilder.ApplyConfiguration(new AccountingTransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new CheckoutIdempotencyRecordConfiguration());
         modelBuilder.ApplyConfiguration(new CustomerConfiguration());
         modelBuilder.ApplyConfiguration(new OrderConfiguration());
         modelBuilder.ApplyConfiguration(new OrderItemConfiguration());
