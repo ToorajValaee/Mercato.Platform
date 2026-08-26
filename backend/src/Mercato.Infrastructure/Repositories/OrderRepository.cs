@@ -20,4 +20,12 @@ public sealed class OrderRepository : IOrderRepository
         await _context.SaveChangesAsync(cancellationToken);
         return order;
     }
+
+    public Task<Order?> GetAsync(Guid orderId, CancellationToken cancellationToken = default)
+    {
+        return _context.Orders
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.Id == orderId, cancellationToken);
+    }
 }
