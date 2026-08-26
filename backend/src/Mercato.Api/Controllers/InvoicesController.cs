@@ -1,14 +1,32 @@
+using Mercato.Application.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Mercato.Api.Controllers;
 
 [ApiController]
 [Route("api/invoices")]
-public class InvoicesController : ControllerBase
+[Authorize(Roles = "Admin,Manager")]
+public sealed class InvoicesController : ControllerBase
 {
-    [HttpGet]
-    public IActionResult Get()
+    private readonly IInvoiceService _invoices;
+
+    public InvoicesController(IInvoiceService invoices)
     {
-        return Ok(Array.Empty<object>());
+        _invoices = invoices;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get(
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? customerId,
+        CancellationToken cancellationToken)
+        => Ok(await _invoices.GetAllAsync(branchId, customerId, cancellationToken));
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
+    {
+        var invoice = await _invoices.GetAsync(id, cancellationToken);
+        return invoice is null ? NotFound() : Ok(invoice);
     }
 }
