@@ -5,4 +5,5 @@ public record UpdateProductRequest(
     string? Sku,
     decimal PurchasePrice,
     decimal SalePrice,
-    Guid? CategoryId);
+    Guid? CategoryId,
+    Guid? ArtistId);
