@@ -20,8 +20,31 @@ public sealed class SettlementServiceImplementation : ISettlementService
         decimal purchaseUnitPrice,
         CancellationToken cancellationToken = default)
     {
+        return RecordLineAsync(orderId, artistId, productId, quantity, purchaseUnitPrice, false, cancellationToken);
+    }
+
+    public Task RecordReturnAsync(
+        Guid orderId,
+        Guid artistId,
+        Guid productId,
+        int quantity,
+        decimal purchaseUnitPrice,
+        CancellationToken cancellationToken = default)
+    {
+        return RecordLineAsync(orderId, artistId, productId, quantity, purchaseUnitPrice, true, cancellationToken);
+    }
+
+    private Task RecordLineAsync(
+        Guid orderId,
+        Guid artistId,
+        Guid productId,
+        int quantity,
+        decimal purchaseUnitPrice,
+        bool isReturn,
+        CancellationToken cancellationToken)
+    {
         if (orderId == Guid.Empty || artistId == Guid.Empty || productId == Guid.Empty)
-            throw new ArgumentException("Settlement sale references must be valid identifiers.");
+            throw new ArgumentException("Settlement references must be valid identifiers.");
 
         if (quantity <= 0)
             throw new ArgumentOutOfRangeException(nameof(quantity));
@@ -29,14 +52,15 @@ public sealed class SettlementServiceImplementation : ISettlementService
         if (purchaseUnitPrice < 0)
             throw new ArgumentOutOfRangeException(nameof(purchaseUnitPrice));
 
+        var sign = isReturn ? -1 : 1;
         return _settlements.AddLineAsync(new SettlementLine
         {
             Id = Guid.NewGuid(),
             OrderId = orderId,
             ArtistId = artistId,
             ProductId = productId,
-            QuantitySold = quantity,
-            PurchaseAmount = purchaseUnitPrice * quantity
+            QuantitySold = sign * quantity,
+            PurchaseAmount = sign * purchaseUnitPrice * quantity
         }, cancellationToken);
     }
 
