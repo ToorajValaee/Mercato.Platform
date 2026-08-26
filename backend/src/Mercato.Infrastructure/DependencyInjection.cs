@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<ISettlementRepository, SettlementRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IAccountingTransactionRepository, AccountingTransactionRepository>();
+        services.AddScoped<ICheckoutIdempotencyRepository, CheckoutIdempotencyRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IUserRepository, UserRepository>();
 
