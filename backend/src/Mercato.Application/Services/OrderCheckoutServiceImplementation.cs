@@ -53,6 +53,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             async transactionCancellationToken =>
             {
                 var orderItems = new List<OrderItem>(request.Items.Count);
+                var receiptLines = new List<ReceiptLine>(request.Items.Count);
                 var settlementSales = new List<(Guid ArtistId, Guid ProductId, int Quantity, decimal PurchaseUnitPrice)>();
 
                 foreach (var item in request.Items)
@@ -67,6 +68,8 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     if (available < item.Quantity)
                         throw new InvalidOperationException($"Insufficient stock for product {item.ProductId}.");
 
+                    var lineTotal = item.Quantity * product.SalePrice;
+
                     orderItems.Add(new OrderItem
                     {
                         Id = Guid.NewGuid(),
@@ -74,6 +77,13 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                         UnitPrice = product.SalePrice,
                         Quantity = item.Quantity
                     });
+
+                    receiptLines.Add(new ReceiptLine(
+                        item.ProductId,
+                        product.Name,
+                        item.Quantity,
+                        product.SalePrice,
+                        lineTotal));
 
                     if (product.ArtistId is Guid artistId && artistId != Guid.Empty)
                     {
@@ -85,7 +95,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     }
                 }
 
-                var total = orderItems.Sum(x => x.Quantity * x.UnitPrice);
+                var total = receiptLines.Sum(x => x.LineTotal);
 
                 var order = await _orders.CreateAsync(new Order
                 {
@@ -125,14 +135,16 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                         transactionCancellationToken);
                 }
 
+                var paidAtUtc = DateTime.UtcNow;
+                var paymentMethod = request.PaymentMethod.Trim();
                 var payment = await _payments.AddAsync(new Payment
                 {
                     Id = Guid.NewGuid(),
                     OrderId = order.Id,
                     Amount = total,
-                    Method = request.PaymentMethod.Trim(),
-                    Reference = $"POS-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..25],
-                    PaidAt = DateTime.UtcNow
+                    Method = paymentMethod,
+                    Reference = $"POS-{paidAtUtc:yyyyMMdd}-{Guid.NewGuid():N}"[..25],
+                    PaidAt = paidAtUtc
                 }, transactionCancellationToken);
 
                 await _accountingTransactions.AddAsync(new AccountingTransaction
@@ -144,7 +156,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     Amount = total,
                     Type = "Sale",
                     Description = $"POS sale paid by {payment.Method}",
-                    CreatedAtUtc = DateTime.UtcNow
+                    CreatedAtUtc = paidAtUtc
                 }, transactionCancellationToken);
 
                 return new CheckoutResult
@@ -152,8 +164,12 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     OrderId = order.Id,
                     InvoiceId = invoice.Id,
                     PaymentId = payment.Id,
+                    BranchId = request.BranchId,
                     Total = total,
+                    PaymentMethod = payment.Method,
                     ReceiptReference = payment.Reference,
+                    PaidAtUtc = paidAtUtc,
+                    Items = receiptLines,
                     Status = "Completed"
                 };
             },
