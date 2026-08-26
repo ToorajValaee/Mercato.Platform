@@ -1,15 +1,18 @@
+using Mercato.Application.Repositories;
 using Mercato.Domain.Entities;
 
 namespace Mercato.Application.Services;
 
-public interface IOrderService
-{
-    Task<Order> CreateAsync(Order order, CancellationToken cancellationToken = default);
-}
-
 public sealed class OrderServiceImplementation : IOrderService
 {
-    public Task<Order> CreateAsync(Order order, CancellationToken cancellationToken = default)
+    private readonly IOrderRepository _orders;
+
+    public OrderServiceImplementation(IOrderRepository orders)
+    {
+        _orders = orders;
+    }
+
+    public async Task<Order> CreateAsync(Order order, CancellationToken cancellationToken = default)
     {
         if (order.Id == Guid.Empty)
             order.Id = Guid.NewGuid();
@@ -17,6 +20,14 @@ public sealed class OrderServiceImplementation : IOrderService
         if (order.CreatedAtUtc == default)
             order.CreatedAtUtc = DateTime.UtcNow;
 
-        return Task.FromResult(order);
+        foreach (var item in order.Items)
+        {
+            if (item.Id == Guid.Empty)
+                item.Id = Guid.NewGuid();
+
+            item.OrderId = order.Id;
+        }
+
+        return await _orders.AddAsync(order, cancellationToken);
     }
 }
