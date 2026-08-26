@@ -8,4 +8,5 @@ public class Product
     public decimal PurchasePrice { get; set; }
     public decimal SalePrice { get; set; }
     public Guid? CategoryId { get; set; }
+    public Guid? ArtistId { get; set; }
 }
