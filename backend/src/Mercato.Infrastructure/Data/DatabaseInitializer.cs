@@ -4,15 +4,15 @@ namespace Mercato.Infrastructure.Data;
 
 public static class DatabaseInitializer
 {
-    public static async Task InitializeAsync(MercatoDbContext context)
+    public static async Task InitializeAsync(MercatoDbContext context, CancellationToken cancellationToken = default)
     {
-        var migrations = await context.Database.GetMigrationsAsync();
+        var migrations = context.Database.GetMigrations();
         if (migrations.Any())
         {
-            await context.Database.MigrateAsync();
+            await context.Database.MigrateAsync(cancellationToken);
             return;
         }
 
-        await context.Database.EnsureCreatedAsync();
+        await context.Database.EnsureCreatedAsync(cancellationToken);
     }
 }
