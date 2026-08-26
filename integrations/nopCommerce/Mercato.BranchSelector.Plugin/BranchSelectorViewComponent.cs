@@ -1,7 +1,9 @@
 using System.Net;
 using Mercato.NopCommerce.Core;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ViewComponents;
 
 namespace Mercato.BranchSelector.Plugin;
 
@@ -47,6 +49,6 @@ public sealed class BranchSelectorViewComponent : ViewComponent
                    $"<select id=\"mercato-branch\" name=\"branchId\" onchange=\"this.form.submit()\">{options}</select>" +
                    "</form>";
 
-        return Content(html, "text/html");
+        return new HtmlContentViewComponentResult(new HtmlString(html));
     }
 }
