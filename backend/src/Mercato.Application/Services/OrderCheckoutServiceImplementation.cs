@@ -12,6 +12,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
     private readonly IInvoiceService _invoices;
     private readonly IInventoryService _inventory;
     private readonly IProductRepository _products;
+    private readonly ICustomerRepository _customers;
     private readonly ISettlementService _settlements;
     private readonly IPaymentRepository _payments;
     private readonly IAccountingTransactionRepository _accountingTransactions;
@@ -23,6 +24,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         IInvoiceService invoices,
         IInventoryService inventory,
         IProductRepository products,
+        ICustomerRepository customers,
         ISettlementService settlements,
         IPaymentRepository payments,
         IAccountingTransactionRepository accountingTransactions,
@@ -33,6 +35,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         _invoices = invoices;
         _inventory = inventory;
         _products = products;
+        _customers = customers;
         _settlements = settlements;
         _payments = payments;
         _accountingTransactions = accountingTransactions;
@@ -60,6 +63,9 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         if (request.Items.Count == 0)
             throw new InvalidOperationException("Checkout requires items.");
 
+        if (request.CustomerId != Guid.Empty && !await _customers.ExistsAsync(request.CustomerId, cancellationToken))
+            throw new InvalidOperationException("Checkout customer was not found.");
+
         var existing = await _idempotency.GetAsync(idempotencyKey, cancellationToken);
         if (existing is not null)
             return DeserializeResult(existing);
@@ -69,10 +75,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             return await _unitOfWork.ExecuteInTransactionAsync(
                 async transactionCancellationToken =>
                 {
-                    var existingInsideTransaction = await _idempotency.GetAsync(
-                        idempotencyKey,
-                        transactionCancellationToken);
-
+                    var existingInsideTransaction = await _idempotency.GetAsync(idempotencyKey, transactionCancellationToken);
                     if (existingInsideTransaction is not null)
                         return DeserializeResult(existingInsideTransaction);
 
@@ -93,7 +96,6 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                             throw new InvalidOperationException($"Insufficient stock for product {item.ProductId}.");
 
                         var lineTotal = item.Quantity * product.SalePrice;
-
                         orderItems.Add(new OrderItem
                         {
                             Id = Guid.NewGuid(),
@@ -102,25 +104,13 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                             Quantity = item.Quantity
                         });
 
-                        receiptLines.Add(new ReceiptLine(
-                            item.ProductId,
-                            product.Name,
-                            item.Quantity,
-                            product.SalePrice,
-                            lineTotal));
+                        receiptLines.Add(new ReceiptLine(item.ProductId, product.Name, item.Quantity, product.SalePrice, lineTotal));
 
                         if (product.ArtistId is Guid artistId && artistId != Guid.Empty)
-                        {
-                            settlementSales.Add((
-                                artistId,
-                                item.ProductId,
-                                item.Quantity,
-                                product.PurchasePrice));
-                        }
+                            settlementSales.Add((artistId, item.ProductId, item.Quantity, product.PurchasePrice));
                     }
 
                     var total = receiptLines.Sum(x => x.LineTotal);
-
                     var order = await _orders.CreateAsync(new Order
                     {
                         Id = Guid.NewGuid(),
@@ -130,13 +120,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     }, transactionCancellationToken);
 
                     foreach (var item in orderItems)
-                    {
-                        await _inventory.AdjustStockAsync(
-                            item.ProductId,
-                            request.BranchId,
-                            -item.Quantity,
-                            $"Checkout order {order.Id}");
-                    }
+                        await _inventory.AdjustStockAsync(item.ProductId, request.BranchId, -item.Quantity, $"Checkout order {order.Id}");
 
                     var invoice = await _invoices.CreateAsync(new Invoice
                     {
@@ -149,15 +133,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     });
 
                     foreach (var sale in settlementSales)
-                    {
-                        await _settlements.RecordSaleAsync(
-                            order.Id,
-                            sale.ArtistId,
-                            sale.ProductId,
-                            sale.Quantity,
-                            sale.PurchaseUnitPrice,
-                            transactionCancellationToken);
-                    }
+                        await _settlements.RecordSaleAsync(order.Id, sale.ArtistId, sale.ProductId, sale.Quantity, sale.PurchaseUnitPrice, transactionCancellationToken);
 
                     var paidAtUtc = DateTime.UtcNow;
                     var paymentMethod = request.PaymentMethod.Trim();
@@ -167,6 +143,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                         OrderId = order.Id,
                         Amount = total,
                         Method = paymentMethod,
+                        Type = "Payment",
                         Reference = $"POS-{paidAtUtc:yyyyMMdd}-{Guid.NewGuid():N}"[..25],
                         PaidAt = paidAtUtc
                     }, transactionCancellationToken);
@@ -206,22 +183,18 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     }, transactionCancellationToken);
 
                     return result;
-                },
-                cancellationToken);
+                }, cancellationToken);
         }
         catch (CheckoutIdempotencyConflictException)
         {
             var completed = await _idempotency.GetAsync(idempotencyKey, cancellationToken);
             if (completed is not null)
                 return DeserializeResult(completed);
-
             throw;
         }
     }
 
     private static CheckoutResult DeserializeResult(CheckoutIdempotencyRecord record)
-    {
-        return JsonSerializer.Deserialize<CheckoutResult>(record.ResponseJson)
+        => JsonSerializer.Deserialize<CheckoutResult>(record.ResponseJson)
             ?? throw new InvalidOperationException("Stored checkout idempotency result is invalid.");
-    }
 }
