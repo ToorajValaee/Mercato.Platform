@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.3
+Version: 1.4
 Purpose: Source of truth for product requirements, business flows, architecture decisions, implementation status, known gaps, and remaining development work.
 
 ## 1. Vision
@@ -140,6 +140,8 @@ Requirements:
 - Settlement reporting and payment status
 
 Business rule: artist products are tracked by purchase cost, not revenue-sharing percentage. On sale, settlement data records `PurchasePrice × QuantitySold` for the product's artist.
+
+Settlement summaries aggregate sale settlement lines for one artist and one explicit UTC period. The same artist/period can only produce one persisted summary. Marking a settlement paid records `PaidAtUtc`; actual money-transfer method and approval schedule remain business decisions.
 
 ### Accounting
 
@@ -302,14 +304,21 @@ Implemented:
 - [x] SettlementLine records OrderId, ArtistId, ProductId, QuantitySold, PurchaseAmount
 - [x] Checkout records purchase-cost settlement lines only for artist-owned products
 - [x] Settlement lines are persisted through EF repository
+- [x] Settlement period aggregation by ArtistId and UTC period
+- [x] ArtistSettlement summaries persisted through EF
+- [x] Duplicate artist/period summaries prevented by unique database index and service lookup
+- [x] Paid/unpaid state with PaidAtUtc timestamp
+- [x] Settlement listing with artist and paid-status filters
+- [x] Settlement API calculation endpoint
+- [x] Settlement API mark-paid endpoint
+- [x] Settlement API protected for Admin/Manager roles
 
 Still required:
 
-- [ ] Settlement period aggregation
-- [ ] Persist ArtistSettlement summaries
-- [ ] Paid/unpaid settlement workflow
-- [ ] Settlement API completion
-- [ ] Settlement reports
+- [ ] Settlement payment approval workflow if required
+- [ ] External/bank/cash settlement payment method tracking if required
+- [ ] Settlement payable accounting posting
+- [ ] Settlement reports/export
 
 ### Known technical issues discovered during development
 
@@ -322,12 +331,14 @@ Resolved:
 - [x] Checkout previously trusted client UnitPrice; authoritative SalePrice is now loaded from Mercato product data.
 - [x] Checkout previously generated invalid settlement summaries without a valid ArtistId; checkout now records attributable settlement lines instead.
 - [x] UnitOfWork previously returned zero without calling EF; it now saves through MercatoDbContext and can execute an atomic EF transaction.
+- [x] SettlementsController previously returned an empty placeholder array; it now exposes real settlement workflows.
+- [x] ArtistSettlement previously had no settlement period or payment timestamp; period and payment-state audit fields are now modeled.
 
 To verify later:
 
 - [ ] Database migrations match the current domain model.
 - [ ] Build succeeds after all development batches are complete.
-- [ ] Existing database schema migration strategy for ArtistId, SettlementLine.OrderId, Payment.Reference, and AccountingTransaction.
+- [ ] Existing database schema migration strategy for ArtistId, SettlementLine.OrderId, Payment.Reference, AccountingTransaction, and ArtistSettlement period/payment fields.
 - [ ] Concurrent checkout/stock locking behavior under load.
 
 ## 10. Remaining Work List
@@ -340,7 +351,7 @@ To verify later:
 - [ ] Complete Artist management module
 - [ ] Complete Accounting module beyond sale transaction capture
 - [ ] Complete POS idempotency/authorization/payment-detail workflow
-- [ ] Complete artist settlement aggregation/payment workflow
+- [ ] Complete settlement payable accounting and reports
 - [ ] Complete Catalog generator
 - [ ] Complete nopCommerce connector plugin
 - [ ] Complete product sync plugin
@@ -370,6 +381,7 @@ Known:
 - POS checkout must use server-side prices.
 - POS checkout records payment and accounting data atomically with the sale.
 - POS checkout returns line-level receipt data suitable for a frontend/printer formatting layer.
+- Artist settlement summaries are period-based, persisted, and explicitly marked paid after aggregation.
 
 Unknown or requiring explicit later decision:
 
@@ -378,7 +390,7 @@ Unknown or requiring explicit later decision:
 - Discount/coupon authority for POS.
 - Fiscal/legal receipt requirements beyond the current durable receipt reference and printable payload.
 - Whether anonymous/guest POS customers are represented by `Guid.Empty`, nullable customer IDs, or a system customer.
-- Settlement payment schedule and approval workflow.
+- Settlement payment schedule, approval workflow, and external payment method.
 - Accounting chart of accounts and double-entry posting rules.
 - Exact nopCommerce version targeted by the plugins.
 
