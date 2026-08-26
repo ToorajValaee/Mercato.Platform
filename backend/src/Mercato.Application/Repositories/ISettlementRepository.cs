@@ -18,6 +18,10 @@ public interface ISettlementRepository
         DateTime to,
         CancellationToken cancellationToken = default);
 
+    Task<ArtistSettlement?> GetSettlementAsync(
+        Guid settlementId,
+        CancellationToken cancellationToken = default);
+
     Task<ArtistSettlement> AddSettlementAsync(
         ArtistSettlement settlement,
         CancellationToken cancellationToken = default);
