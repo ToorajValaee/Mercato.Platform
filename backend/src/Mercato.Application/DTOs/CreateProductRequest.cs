@@ -5,4 +5,5 @@ public record CreateProductRequest(
     string? Sku,
     decimal PurchasePrice,
     decimal SalePrice,
-    Guid? CategoryId);
+    Guid? CategoryId,
+    Guid? ArtistId);
