@@ -6,6 +6,13 @@ public static class DatabaseInitializer
 {
     public static async Task InitializeAsync(MercatoDbContext context)
     {
-        await context.Database.MigrateAsync();
+        var migrations = await context.Database.GetMigrationsAsync();
+        if (migrations.Any())
+        {
+            await context.Database.MigrateAsync();
+            return;
+        }
+
+        await context.Database.EnsureCreatedAsync();
     }
 }
