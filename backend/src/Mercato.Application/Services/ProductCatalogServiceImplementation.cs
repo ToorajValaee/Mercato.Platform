@@ -30,6 +30,7 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
             result.Add(new CatalogProductDto(
                 product.Id,
                 product.Name,
+                product.Sku,
                 product.SalePrice,
                 product.CategoryId,
                 product.ArtistId,
