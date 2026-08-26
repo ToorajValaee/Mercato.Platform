@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.8
+Version: 1.9
 Purpose: Source of truth for product requirements, architecture, business rules, implementation status, known gaps, and continuation work.
 
 ## 1. Product boundary
@@ -94,11 +94,11 @@ This is not a policy-defined double-entry general ledger. Chart of accounts, jur
 Target release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**. All five plugin projects target `net9.0`, include nopCommerce `BasePlugin` adapters, and declare `SupportedVersions: ["4.90"]`.
 
 Implemented shared/core behavior:
-- `Mercato.NopCommerce.Core`: authenticated Mercato HTTP client, health, catalog retrieval, and idempotent commerce-order synchronization;
+- `Mercato.NopCommerce.Core`: authenticated Mercato HTTP client, health, branch/catalog retrieval, and idempotent commerce-order synchronization;
 - `Mercato.Connector.Plugin`: connection/health core and concrete DI registration;
 - `Mercato.ProductSync.Plugin`: Mercato catalog → concrete nopCommerce product upsert;
 - `Mercato.InventorySync.Plugin`: branch-specific Mercato availability → concrete nopCommerce stock snapshot;
-- `Mercato.BranchSelector.Plugin`: branch-specific availability plus persisted customer branch selection;
+- `Mercato.BranchSelector.Plugin`: storefront branch selector plus persisted customer branch selection;
 - `Mercato.OrderSync.Plugin`: nopCommerce `OrderPaidEvent` → Mercato checkout.
 
 Concrete adapter rules:
@@ -107,20 +107,27 @@ Concrete adapter rules:
 - product name and price are overwritten from Mercato so Mercato remains product/pricing authority;
 - inventory sync writes nop `StockQuantity` from Mercato availability while Mercato remains stock authority;
 - selected branch is stored in nop customer generic attribute `Mercato.BranchId`;
+- branch selector renders in nopCommerce `HeaderSelectors`, loads branches from `GET /api/branches`, and persists the customer selection through the plugin endpoint;
 - paid-order sync resolves branch from order/customer attributes and then `Mercato:DefaultBranchId` fallback;
 - optional Mercato customer mapping uses `Mercato.CustomerId`; otherwise checkout is unlinked/guest;
 - paid-order lines map nop products back to Mercato GUIDs from synchronized metadata;
 - order synchronization uses idempotency key `nop:{nopOrderId}`;
 - missing branch or unmapped products fail loudly and are logged in nopCommerce instead of creating incorrect Mercato transactions.
 
+Synchronization triggers:
+- ProductSync installs an enabled nopCommerce `IScheduleTask` named `Mercato product synchronization`, default period 900 seconds;
+- InventorySync installs an enabled nopCommerce `IScheduleTask` named `Mercato inventory synchronization`, default period 300 seconds;
+- scheduled inventory synchronization uses `Mercato:DefaultBranchId` as its branch snapshot source;
+- plugin uninstall removes the corresponding schedule task.
+
 Concrete adapters register through nopCommerce `INopStartup`. Project files accept `NopCommerceRoot`; when supplied they reference the exact 4.90.7 `Nop.Web.csproj`. CI checks out official `release-4.90.7` source and compiles the adapters against it.
 
 Configuration keys:
 - `Mercato:BaseUrl` — required;
 - `Mercato:BearerToken` — server-to-server bearer credential;
-- `Mercato:DefaultBranchId` — optional order-sync fallback branch.
+- `Mercato:DefaultBranchId` — order-sync fallback and scheduled inventory-sync branch.
 
-Remaining nopCommerce work is deployment/UX triggering: expose branch selection in the chosen storefront theme, add manual/scheduled product and inventory sync triggers, and verify the complete paid-order flow in a running nopCommerce deployment.
+Remaining nopCommerce work is deployed-environment verification and optional richer admin UX; the core storefront branch selection and automatic product/inventory synchronization triggers are implemented.
 
 ## 10. Database initialization
 
@@ -144,8 +151,10 @@ Implemented core platform development:
 - [x] nopCommerce plugin metadata/BasePlugin adapters
 - [x] concrete product gateway
 - [x] concrete inventory gateway
-- [x] customer branch-selection persistence
+- [x] storefront branch selector and customer branch-selection persistence
 - [x] paid-order event consumer and product reverse mapping
+- [x] automatic scheduled product synchronization
+- [x] automatic scheduled inventory synchronization
 - [x] CI configured to compile against official nopCommerce 4.90.7 source
 
 Business/policy decisions intentionally unresolved:
@@ -158,10 +167,8 @@ Business/policy decisions intentionally unresolved:
 - [ ] production EF migrations for schema upgrades
 
 Integration/deployment work still required:
-- [ ] expose branch-selector storefront UI in the deployed nopCommerce theme
-- [ ] add scheduled/manual product-sync trigger
-- [ ] add scheduled/manual inventory-sync trigger
 - [ ] run end-to-end paid nop order → Mercato transaction in a deployed environment
+- [ ] verify scheduled sync against a running nopCommerce instance
 - [ ] Docker deployment verification
 - [ ] production-readiness/security review
 
