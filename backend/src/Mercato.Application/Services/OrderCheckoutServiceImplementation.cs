@@ -10,17 +10,20 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
     private readonly IInvoiceService _invoices;
     private readonly IInventoryService _inventory;
     private readonly IProductRepository _products;
+    private readonly ISettlementService _settlements;
 
     public OrderCheckoutServiceImplementation(
         IOrderService orders,
         IInvoiceService invoices,
         IInventoryService inventory,
-        IProductRepository products)
+        IProductRepository products,
+        ISettlementService settlements)
     {
         _orders = orders;
         _invoices = invoices;
         _inventory = inventory;
         _products = products;
+        _settlements = settlements;
     }
 
     public async Task<CheckoutResult> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
@@ -32,6 +35,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             throw new InvalidOperationException("Checkout requires items.");
 
         var orderItems = new List<OrderItem>(request.Items.Count);
+        var settlementSales = new List<(Guid ArtistId, Guid ProductId, int Quantity, decimal PurchaseUnitPrice)>();
 
         foreach (var item in request.Items)
         {
@@ -52,6 +56,15 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                 UnitPrice = product.SalePrice,
                 Quantity = item.Quantity
             });
+
+            if (product.ArtistId is Guid artistId && artistId != Guid.Empty)
+            {
+                settlementSales.Add((
+                    artistId,
+                    item.ProductId,
+                    item.Quantity,
+                    product.PurchasePrice));
+            }
         }
 
         var total = orderItems.Sum(x => x.Quantity * x.UnitPrice);
@@ -82,6 +95,17 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             TotalAmount = total,
             CreatedAt = DateTime.UtcNow
         });
+
+        foreach (var sale in settlementSales)
+        {
+            await _settlements.RecordSaleAsync(
+                order.Id,
+                sale.ArtistId,
+                sale.ProductId,
+                sale.Quantity,
+                sale.PurchaseUnitPrice,
+                cancellationToken);
+        }
 
         return new CheckoutResult(true, $"Order {order.Id} and invoice {invoice.Id} created.");
     }
