@@ -9,6 +9,7 @@ public static class DependencyInjection
         services.AddScoped<Services.IProductService, Services.ProductServiceImplementation>();
         services.AddScoped<Services.IProductCatalogService, Services.ProductCatalogServiceImplementation>();
         services.AddScoped<Services.ICategoryService, Services.CategoryServiceImplementation>();
+        services.AddScoped<Services.IArtistService, Services.ArtistServiceImplementation>();
         services.AddScoped<Services.IBranchService, Services.BranchServiceImplementation>();
         services.AddScoped<Services.IInventoryService, Services.InventoryServiceImplementation>();
         services.AddScoped<Services.IBranchTransferService, Services.BranchTransferServiceImplementation>();
