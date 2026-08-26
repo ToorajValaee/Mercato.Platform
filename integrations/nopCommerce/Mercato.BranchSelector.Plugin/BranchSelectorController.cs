@@ -13,9 +13,17 @@ public sealed class BranchSelectorController : Controller
     }
 
     [HttpPost("select")]
-    public async Task<IActionResult> Select(Guid branchId, string? returnUrl)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Select(Guid branchId, string? returnUrl, CancellationToken cancellationToken)
     {
-        await _selection.SelectBranchAsync(branchId);
-        return Redirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+        try
+        {
+            await _selection.SelectBranchAsync(branchId, cancellationToken);
+            return Redirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+        }
+        catch (ArgumentException)
+        {
+            return BadRequest();
+        }
     }
 }
