@@ -1,6 +1,10 @@
+using Mercato.Application.DTOs;
+
 namespace Mercato.Application.Services;
 
 public interface IProductCatalogService
 {
-    Task<IEnumerable<object>> GetCatalogAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CatalogProductDto>> GetCatalogAsync(
+        Guid? branchId = null,
+        CancellationToken cancellationToken = default);
 }
