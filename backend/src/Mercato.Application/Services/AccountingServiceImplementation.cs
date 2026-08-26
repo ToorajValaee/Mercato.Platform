@@ -33,6 +33,14 @@ public sealed class AccountingServiceImplementation : IAccountingService
         var transactions = await _transactions.GetAsync(branchId, fromUtc, toUtc, null, cancellationToken);
         var grossSales = transactions.Where(x => x.Type == "Sale").Sum(x => x.Amount);
         var refunds = Math.Abs(transactions.Where(x => x.Type == "Refund").Sum(x => x.Amount));
-        return new AccountingSummary(grossSales, refunds, grossSales - refunds, transactions.Count);
+        var settlementPayments = Math.Abs(transactions.Where(x => x.Type == "ArtistSettlementPayment").Sum(x => x.Amount));
+        var netSales = grossSales - refunds;
+        return new AccountingSummary(
+            grossSales,
+            refunds,
+            netSales,
+            settlementPayments,
+            netSales - settlementPayments,
+            transactions.Count);
     }
 }
