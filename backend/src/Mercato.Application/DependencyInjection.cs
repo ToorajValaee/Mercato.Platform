@@ -11,6 +11,7 @@ public static class DependencyInjection
         services.AddScoped<Services.ICategoryService, Services.CategoryServiceImplementation>();
         services.AddScoped<Services.IArtistService, Services.ArtistServiceImplementation>();
         services.AddScoped<Services.IBranchService, Services.BranchServiceImplementation>();
+        services.AddScoped<Services.ICustomerService, Services.CustomerServiceImplementation>();
         services.AddScoped<Services.IInventoryService, Services.InventoryServiceImplementation>();
         services.AddScoped<Services.IBranchTransferService, Services.BranchTransferServiceImplementation>();
         services.AddScoped<Interfaces.IAuthService, Services.AuthService>();
