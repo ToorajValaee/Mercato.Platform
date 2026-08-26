@@ -22,6 +22,7 @@ public sealed class NopStartup : INopStartup
         });
         services.AddScoped<INopInventoryGateway, NopInventoryGateway>();
         services.AddScoped<InventorySyncCore>();
+        services.AddScoped<InventorySyncTask>();
     }
 
     public void Configure(IApplicationBuilder application) { }
