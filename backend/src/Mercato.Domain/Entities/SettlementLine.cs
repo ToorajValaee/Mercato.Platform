@@ -3,6 +3,7 @@ namespace Mercato.Domain.Entities;
 public class SettlementLine
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid OrderId { get; set; }
     public Guid ArtistId { get; set; }
     public Guid ProductId { get; set; }
     public int QuantitySold { get; set; }
