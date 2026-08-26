@@ -4,7 +4,10 @@ using System.Text.Json;
 namespace Mercato.NopCommerce.Core;
 
 public sealed record MercatoConnectorOptions(string BaseUrl, string BearerToken);
-public sealed record CatalogProduct(Guid ProductId, string Name, decimal SalePrice, Guid? CategoryId, Guid? ArtistId, Guid? BranchId, int? AvailableQuantity);
+public sealed record CatalogProduct(Guid ProductId, string Name, string? Sku, decimal SalePrice, Guid? CategoryId, Guid? ArtistId, Guid? BranchId, int? AvailableQuantity)
+{
+    public string NopSku => string.IsNullOrWhiteSpace(Sku) ? $"MERCATO-{ProductId:N}" : Sku.Trim();
+}
 public sealed record CommerceOrderItem(Guid ProductId, int Quantity);
 public sealed record CommerceOrder(Guid OrderId, Guid BranchId, Guid CustomerId, string PaymentMethod, IReadOnlyList<CommerceOrderItem> Items);
 
