@@ -11,4 +11,24 @@ public interface ISettlementRepository
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken = default);
+
+    Task<ArtistSettlement?> GetForPeriodAsync(
+        Guid artistId,
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default);
+
+    Task<ArtistSettlement> AddSettlementAsync(
+        ArtistSettlement settlement,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ArtistSettlement>> GetSettlementsAsync(
+        Guid? artistId = null,
+        bool? isPaid = null,
+        CancellationToken cancellationToken = default);
+
+    Task<ArtistSettlement?> MarkPaidAsync(
+        Guid settlementId,
+        DateTime paidAtUtc,
+        CancellationToken cancellationToken = default);
 }
