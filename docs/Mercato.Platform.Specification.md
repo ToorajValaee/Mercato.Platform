@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.4
+Version: 1.5
 Purpose: Source of truth for product requirements, business flows, architecture decisions, implementation status, known gaps, and remaining development work.
 
 ## 1. Vision
@@ -83,15 +83,18 @@ The current implementation uses a consolidated Clean Architecture solution rathe
 4. Check branch inventory.
 5. Add products to cart.
 6. Select payment method.
-7. Checkout using server-authoritative product prices.
-8. Persist Order and OrderItems.
-9. Reduce inventory.
-10. Persist Invoice linked to the Order.
-11. Record artist settlement lines using product purchase cost.
-12. Persist Payment.
-13. Post AccountingTransaction for the sale.
-14. Commit the complete checkout transaction atomically.
-15. Return a printable receipt payload containing order, invoice, payment, branch, payment method, timestamp, total, durable receipt reference, and line-level product/quantity/price totals.
+7. Generate a unique checkout idempotency key for the sale attempt.
+8. Checkout using server-authoritative product prices.
+9. Persist Order and OrderItems.
+10. Reduce inventory.
+11. Persist Invoice linked to the Order.
+12. Record artist settlement lines using product purchase cost.
+13. Persist Payment.
+14. Post AccountingTransaction for the sale.
+15. Persist the completed checkout result against the idempotency key.
+16. Commit the complete checkout transaction atomically.
+17. Return a printable receipt payload containing order, invoice, payment, branch, payment method, timestamp, total, durable receipt reference, and line-level product/quantity/price totals.
+18. If the same idempotency key is retried, return the original completed checkout result rather than creating a second sale.
 
 ## 6. Core Business Modules
 
@@ -169,7 +172,10 @@ Requirements:
 - Payment handling
 - Printable receipt response
 - Atomic checkout transaction
+- Retry-safe checkout idempotency
 - Offline-ready consideration
+
+Idempotency rule: every POS checkout request must provide an `IdempotencyKey` of at most 100 characters. Mercato stores the successful `CheckoutResult` using a unique database key. Sequential retries return the stored result. Concurrent requests with the same key are protected by the unique index; the losing transaction rolls back and then returns the already committed result.
 
 ### Catalog
 
@@ -245,6 +251,7 @@ Before considering the platform complete, verify:
 - Settlement receives valid artist/product/order attribution.
 - Financial records are persisted, not only returned in memory.
 - End-to-end flows are transactionally safe.
+- Retried checkout requests cannot create duplicate sales.
 
 ## 9. Current Implementation Status
 
@@ -269,6 +276,10 @@ Implemented:
 - [x] EF transaction boundary across order, stock, invoice, settlement, payment, and accounting operations
 - [x] POS checkout API endpoint: `POST /api/pos/checkout`
 - [x] Printable checkout receipt payload with BranchId, PaymentMethod, PaidAtUtc, durable reference, and line-level ProductId/ProductName/Quantity/UnitPrice/LineTotal data
+- [x] Required checkout IdempotencyKey with 100-character limit
+- [x] Persisted successful CheckoutResult for retry replay
+- [x] Unique database constraint prevents duplicate committed checkouts for the same idempotency key
+- [x] Transaction rollback clears EF tracking so a concurrent idempotency conflict can safely reload the committed result
 
 Still required:
 
@@ -276,7 +287,6 @@ Still required:
 - [ ] Customer optionality/guest sale rules verification
 - [ ] Cash tender/change handling if required
 - [ ] Card/gateway authorization metadata if required
-- [ ] Idempotency key for retried checkout requests
 
 ### Accounting
 
@@ -333,13 +343,14 @@ Resolved:
 - [x] UnitOfWork previously returned zero without calling EF; it now saves through MercatoDbContext and can execute an atomic EF transaction.
 - [x] SettlementsController previously returned an empty placeholder array; it now exposes real settlement workflows.
 - [x] ArtistSettlement previously had no settlement period or payment timestamp; period and payment-state audit fields are now modeled.
+- [x] Checkout retries previously had no duplicate-sale protection; persisted idempotency result replay is now implemented.
 
 To verify later:
 
 - [ ] Database migrations match the current domain model.
 - [ ] Build succeeds after all development batches are complete.
-- [ ] Existing database schema migration strategy for ArtistId, SettlementLine.OrderId, Payment.Reference, AccountingTransaction, and ArtistSettlement period/payment fields.
-- [ ] Concurrent checkout/stock locking behavior under load.
+- [ ] Existing database schema migration strategy for ArtistId, SettlementLine.OrderId, Payment.Reference, AccountingTransaction, ArtistSettlement period/payment fields, and CheckoutIdempotencyRecord.
+- [ ] Concurrent checkout/stock locking behavior under load beyond duplicate-key protection.
 
 ## 10. Remaining Work List
 
@@ -350,7 +361,7 @@ To verify later:
 - [ ] Complete Branch module
 - [ ] Complete Artist management module
 - [ ] Complete Accounting module beyond sale transaction capture
-- [ ] Complete POS idempotency/authorization/payment-detail workflow
+- [ ] Complete POS authorization/payment-detail workflow
 - [ ] Complete settlement payable accounting and reports
 - [ ] Complete Catalog generator
 - [ ] Complete nopCommerce connector plugin
@@ -381,6 +392,7 @@ Known:
 - POS checkout must use server-side prices.
 - POS checkout records payment and accounting data atomically with the sale.
 - POS checkout returns line-level receipt data suitable for a frontend/printer formatting layer.
+- POS checkout requires an idempotency key and replays the original successful result for retried requests.
 - Artist settlement summaries are period-based, persisted, and explicitly marked paid after aggregation.
 
 Unknown or requiring explicit later decision:
