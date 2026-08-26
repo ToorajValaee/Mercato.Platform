@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.2
+Version: 1.3
 Purpose: Source of truth for product requirements, business flows, architecture decisions, implementation status, known gaps, and remaining development work.
 
 ## 1. Vision
@@ -91,7 +91,7 @@ The current implementation uses a consolidated Clean Architecture solution rathe
 12. Persist Payment.
 13. Post AccountingTransaction for the sale.
 14. Commit the complete checkout transaction atomically.
-15. Return order, invoice, payment, total, and durable receipt reference.
+15. Return a printable receipt payload containing order, invoice, payment, branch, payment method, timestamp, total, durable receipt reference, and line-level product/quantity/price totals.
 
 ## 6. Core Business Modules
 
@@ -165,7 +165,7 @@ Requirements:
 - Invoice creation
 - Artist settlement recording
 - Payment handling
-- Receipt response
+- Printable receipt response
 - Atomic checkout transaction
 - Offline-ready consideration
 
@@ -266,11 +266,10 @@ Implemented:
 - [x] AccountingTransaction persistence for completed sale
 - [x] EF transaction boundary across order, stock, invoice, settlement, payment, and accounting operations
 - [x] POS checkout API endpoint: `POST /api/pos/checkout`
-- [x] Checkout result returns OrderId, InvoiceId, PaymentId, Total, ReceiptReference, and Status
+- [x] Printable checkout receipt payload with BranchId, PaymentMethod, PaidAtUtc, durable reference, and line-level ProductId/ProductName/Quantity/UnitPrice/LineTotal data
 
 Still required:
 
-- [ ] Printable receipt payload with line-level display data
 - [ ] POS-specific authorization roles/policies
 - [ ] Customer optionality/guest sale rules verification
 - [ ] Cash tender/change handling if required
@@ -340,7 +339,7 @@ To verify later:
 - [ ] Complete Branch module
 - [ ] Complete Artist management module
 - [ ] Complete Accounting module beyond sale transaction capture
-- [ ] Complete POS receipt/idempotency/authorization workflow
+- [ ] Complete POS idempotency/authorization/payment-detail workflow
 - [ ] Complete artist settlement aggregation/payment workflow
 - [ ] Complete Catalog generator
 - [ ] Complete nopCommerce connector plugin
@@ -369,14 +368,15 @@ Known:
 - Inventory is ledger/service driven in Mercato.
 - Artist settlement uses purchase cost, not revenue sharing.
 - POS checkout must use server-side prices.
-- POS checkout now records payment and accounting data atomically with the sale.
+- POS checkout records payment and accounting data atomically with the sale.
+- POS checkout returns line-level receipt data suitable for a frontend/printer formatting layer.
 
 Unknown or requiring explicit later decision:
 
 - Final supported POS payment methods.
 - Tax calculation rules and tax jurisdiction behavior.
 - Discount/coupon authority for POS.
-- Fiscal/legal receipt requirements beyond the current durable receipt reference.
+- Fiscal/legal receipt requirements beyond the current durable receipt reference and printable payload.
 - Whether anonymous/guest POS customers are represented by `Guid.Empty`, nullable customer IDs, or a system customer.
 - Settlement payment schedule and approval workflow.
 - Accounting chart of accounts and double-entry posting rules.
