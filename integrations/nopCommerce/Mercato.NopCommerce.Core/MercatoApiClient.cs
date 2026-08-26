@@ -9,7 +9,7 @@ public sealed record CatalogProduct(Guid ProductId, string Name, string? Sku, de
     public string NopSku => string.IsNullOrWhiteSpace(Sku) ? $"MERCATO-{ProductId:N}" : Sku.Trim();
 }
 public sealed record CommerceOrderItem(Guid ProductId, int Quantity);
-public sealed record CommerceOrder(Guid OrderId, Guid BranchId, Guid CustomerId, string PaymentMethod, IReadOnlyList<CommerceOrderItem> Items);
+public sealed record CommerceOrder(string ExternalOrderId, Guid BranchId, Guid CustomerId, string PaymentMethod, IReadOnlyList<CommerceOrderItem> Items);
 
 public sealed class MercatoApiClient
 {
@@ -34,12 +34,13 @@ public sealed class MercatoApiClient
 
     public async Task<JsonElement> SyncOrderAsync(CommerceOrder order, CancellationToken cancellationToken = default)
     {
+        var externalOrderId = order.ExternalOrderId.Trim();
         var request = new
         {
             order.BranchId,
             order.CustomerId,
             PaymentMethod = order.PaymentMethod,
-            IdempotencyKey = $"nop:{order.OrderId:N}",
+            IdempotencyKey = $"nop:{externalOrderId}",
             Items = order.Items.Select(x => new { x.ProductId, x.Quantity })
         };
         using var response = await _http.PostAsJsonAsync("api/pos/checkout", request, cancellationToken);
