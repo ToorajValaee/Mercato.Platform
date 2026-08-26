@@ -1,7 +1,9 @@
+using Mercato.Domain.Entities;
+
 namespace Mercato.Application.Repositories;
 
 public interface IInvoiceRepository
 {
-    Task AddAsync(object invoice);
-    Task<object?> GetAsync(Guid id);
+    Task<Invoice> AddAsync(Invoice invoice, CancellationToken cancellationToken = default);
+    Task<Invoice?> GetAsync(Guid id, CancellationToken cancellationToken = default);
 }
