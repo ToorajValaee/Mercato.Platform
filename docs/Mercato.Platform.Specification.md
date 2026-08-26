@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.7
+Version: 1.8
 Purpose: Source of truth for product requirements, architecture, business rules, implementation status, known gaps, and continuation work.
 
 ## 1. Product boundary
@@ -25,7 +25,7 @@ Mercato.Infrastructure
 PostgreSQL / EF Core
 ```
 
-The backend stays consolidated in the existing Clean Architecture projects. Do not split business modules into separate .NET projects without a concrete need.
+The backend stays consolidated in the existing Clean Architecture projects.
 
 ## 3. POS sale flow
 
@@ -48,205 +48,133 @@ Authenticated Staff (Admin/Manager/Cashier)
 → printable receipt payload
 ```
 
-Rules:
-- client-supplied prices are not trusted;
-- `IdempotencyKey` is required and limited to 100 characters;
-- sequential or concurrent retries with the same key cannot create a second committed checkout;
-- non-empty `CustomerId` must identify a real Mercato customer;
-- `Guid.Empty` remains an unlinked/guest checkout customer value because the current invoice model uses a non-nullable Guid;
-- the sale transaction is atomic across order, inventory, invoice, settlement, payment, accounting, and idempotency persistence.
+Client prices are never trusted. Checkout retries cannot create a second committed sale. Non-empty CustomerId must identify a real Mercato customer; Guid.Empty represents an unlinked/guest checkout. Sale persistence is atomic across order, inventory, invoice, settlement, payment, accounting, and idempotency state.
 
 ## 4. POS return/refund flow
 
 ```text
 Original Order
-→ validate returned products and quantities against sold quantities
+→ validate returned quantities
 → prevent cumulative over-return
 → SalesReturn + SalesReturnLines
 → inventory ledger return movements
 → purchase-cost artist settlement reversal lines
-→ negative Payment(Type=Refund)
-→ AccountingTransaction(Type=Refund)
+→ refund Payment
+→ AccountingTransaction(Refund)
 → atomic commit
 ```
 
-Return values are calculated from original order line prices, not current product sale prices. Artist settlement reversals use current product ownership/purchase-cost metadata and negative settlement quantities/amounts.
-
-API: `POST /api/pos/returns`.
+Return values use original order line prices. Artist settlement reversals remain purchase-cost based. API: `POST /api/pos/returns`.
 
 ## 5. Inventory engine
 
-Implemented:
-- EF-backed immutable-style stock movement ledger;
-- available quantity calculated from ledger totals by product and branch;
-- stock adjustments with whole-unit validation and reason/audit text;
-- sale deductions and return additions;
-- branch transfers with source-stock validation;
-- persisted `BranchTransfer` records;
-- stock movement history querying;
-- Admin/Manager adjustment and transfer authorization.
+Implemented: EF-backed stock movement ledger, branch availability, audited whole-unit adjustments, sale deductions, return additions, persisted branch transfers, movement history, and Admin/Manager authorization. Mercato remains the only inventory authority.
 
-Mercato remains the only inventory authority. nopCommerce receives availability snapshots only.
+## 6. Master data and catalog
 
-## 6. Master-data modules
-
-Implemented application/infrastructure/API support now covers:
-- Products: create/update/list/archive, SKU, purchase price, sale price, category reference, optional artist reference;
-- Categories: CRUD plus parent hierarchy validation;
-- Artists: CRUD plus protection against deleting referenced artists;
-- Branches: CRUD;
-- Customers: create/update/list/get;
-- Catalog: Mercato product catalog with optional branch-specific availability;
-- Invoices: persisted creation and query APIs.
-
-Product category/artist references are validated against Mercato records before persistence.
+Implemented application/infrastructure/API support covers Products, Categories, Artists, Branches, Customers, Catalog, and Invoices. Products include SKU, purchase price, sale price, category reference, and optional artist reference. Product category/artist references are validated before persistence. Catalog output includes SKU and optional branch-specific availability.
 
 ## 7. Artist settlement
 
-On checkout, artist-owned products create `SettlementLine` entries using `PurchasePrice × QuantitySold`.
-
-On return, equivalent negative settlement lines reverse purchase-cost liability.
-
-Settlement summaries:
-- aggregate one artist and explicit UTC period;
-- are persisted as `ArtistSettlement`;
-- are unique per artist/period;
-- track paid/unpaid state and `PaidAtUtc`;
-- can be listed and filtered;
-- can be marked paid by Admin/Manager.
-
-Marking a settlement paid atomically creates an `AccountingTransaction` with type `ArtistSettlementPayment` and a negative amount. External bank/cash transfer metadata and approval workflow remain policy decisions.
+Artist-owned sales create SettlementLine records using `PurchasePrice × QuantitySold`; returns create equivalent negative reversals. Period summaries are unique per artist/period, persisted, filterable, and track paid state. Marking a settlement paid creates an `AccountingTransaction(Type=ArtistSettlementPayment)` with a negative amount.
 
 ## 8. Accounting
 
-Implemented accounting event ledger:
-- completed sale → positive `AccountingTransaction(Type=Sale)`;
-- return/refund → negative `AccountingTransaction(Type=Refund)`;
-- paid artist settlement → negative `AccountingTransaction(Type=ArtistSettlementPayment)`;
-- transactions can reference Order, Invoice, Branch, or ArtistSettlement as appropriate;
-- reporting API filters by branch, period, and transaction type;
+Implemented durable accounting event ledger:
+- Sale → positive transaction;
+- Refund → negative transaction;
+- Artist settlement payment → negative transaction;
+- reporting filters by branch, period, and type;
 - summary reports GrossSales, Refunds, NetSales, ArtistSettlementPayments, NetCashMovement, and transaction count.
 
-APIs:
-- `GET /api/accounting/transactions`
-- `GET /api/accounting/summary`
+This is not a policy-defined double-entry general ledger. Chart of accounts, jurisdiction-specific tax accounts, and final posting policy require explicit business/accounting decisions.
 
-This is a durable accounting event ledger, not a finalized double-entry general ledger. Chart of accounts, tax accounts, and jurisdiction-specific posting rules require explicit accounting policy before implementation.
+## 9. nopCommerce 4.90.7 integration
 
-## 9. nopCommerce integration
+Target release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**. All five plugin projects target `net9.0`, include nopCommerce `BasePlugin` adapters, and declare `SupportedVersions: ["4.90"]`.
 
-Target deployment release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**.
+Implemented shared/core behavior:
+- `Mercato.NopCommerce.Core`: authenticated Mercato HTTP client, health, catalog retrieval, and idempotent commerce-order synchronization;
+- `Mercato.Connector.Plugin`: connection/health core and concrete DI registration;
+- `Mercato.ProductSync.Plugin`: Mercato catalog → concrete nopCommerce product upsert;
+- `Mercato.InventorySync.Plugin`: branch-specific Mercato availability → concrete nopCommerce stock snapshot;
+- `Mercato.BranchSelector.Plugin`: branch-specific availability plus persisted customer branch selection;
+- `Mercato.OrderSync.Plugin`: nopCommerce `OrderPaidEvent` → Mercato checkout.
 
-Implemented under `integrations/nopCommerce`:
-- `Mercato.NopCommerce.Core`: authenticated HTTP client, health, catalog, idempotent order synchronization;
-- `Mercato.Connector.Plugin`: connection/health core plus nopCommerce `BasePlugin` adapter and `plugin.json`;
-- `Mercato.ProductSync.Plugin`: Mercato catalog → `INopProductGateway` workflow plus nopCommerce adapter/metadata;
-- `Mercato.InventorySync.Plugin`: branch availability → `INopInventoryGateway` workflow plus nopCommerce adapter/metadata;
-- `Mercato.BranchSelector.Plugin`: branch-specific availability workflow plus nopCommerce adapter/metadata;
-- `Mercato.OrderSync.Plugin`: completed nopCommerce order → Mercato checkout using `nop:{OrderId}` plus nopCommerce adapter/metadata.
+Concrete adapter rules:
+- product sync uses Mercato SKU, or stable fallback `MERCATO-{ProductId:N}` when SKU is absent;
+- synchronized nop products carry `Mercato.ProductId=<guid>` in admin metadata for reverse mapping;
+- product name and price are overwritten from Mercato so Mercato remains product/pricing authority;
+- inventory sync writes nop `StockQuantity` from Mercato availability while Mercato remains stock authority;
+- selected branch is stored in nop customer generic attribute `Mercato.BranchId`;
+- paid-order sync resolves branch from order/customer attributes and then `Mercato:DefaultBranchId` fallback;
+- optional Mercato customer mapping uses `Mercato.CustomerId`; otherwise checkout is unlinked/guest;
+- paid-order lines map nop products back to Mercato GUIDs from synchronized metadata;
+- order synchronization uses idempotency key `nop:{nopOrderId}`;
+- missing branch or unmapped products fail loudly and are logged in nopCommerce instead of creating incorrect Mercato transactions.
 
-All integration projects target `net9.0`. Their `plugin.json` files declare `SupportedVersions: [ "4.90" ]` and assembly names follow nopCommerce plugin conventions. The project files accept `NopCommerceRoot`; when supplied they reference the actual 4.90.7 `src/Presentation/Nop.Web/Nop.Web.csproj`, allowing adapter compilation against the exact nopCommerce API surface.
+Concrete adapters register through nopCommerce `INopStartup`. Project files accept `NopCommerceRoot`; when supplied they reference the exact 4.90.7 `Nop.Web.csproj`. CI checks out official `release-4.90.7` source and compiles the adapters against it.
 
-CI checks out the official `release-4.90.7` source tag and builds the Mercato plugin adapters against it in addition to the version-independent integration cores.
+Configuration keys:
+- `Mercato:BaseUrl` — required;
+- `Mercato:BearerToken` — server-to-server bearer credential;
+- `Mercato:DefaultBranchId` — optional order-sync fallback branch.
 
-Remaining integration work is feature-level nopCommerce wiring where required by storefront UX: concrete product/inventory gateway implementations, event consumers, branch-selection UI/admin configuration, and deployment packaging. These must preserve Mercato as product/inventory/business authority.
+Remaining nopCommerce work is deployment/UX triggering: expose branch selection in the chosen storefront theme, add manual/scheduled product and inventory sync triggers, and verify the complete paid-order flow in a running nopCommerce deployment.
 
 ## 10. Database initialization
 
-No EF migrations currently exist in the repository. Startup now:
-- uses `MigrateAsync` when migrations exist;
-- otherwise uses `EnsureCreatedAsync` so a fresh deployment can create the current schema.
+No EF migrations currently exist. Startup uses `MigrateAsync` when migrations exist and otherwise `EnsureCreatedAsync` for a fresh deployment. Before upgrading an existing production database, create and review a baseline/current EF migration; `EnsureCreated` is not a schema-upgrade strategy.
 
-Before upgrading an existing production database, create and review a baseline/current EF migration; `EnsureCreated` is not a schema-upgrade strategy.
+## 11. Resolved technical debt
 
-## 11. Removed technical debt
-
-Resolved during development:
-- obsolete `Mercato.Application.Services.CheckoutResult` type that shadowed the real DTO and could break compilation;
-- obsolete checkout workflow stub;
-- no-op inventory repository;
-- no-op UnitOfWork;
-- placeholder branches/invoices/transfers/settlements APIs;
-- invalid Product and SettlementLine EF property mappings;
-- in-memory-only order/invoice persistence;
-- client-trusted POS UnitPrice;
-- invalid unattributed settlement creation;
-- missing checkout retry protection.
+Resolved: checkout DTO/type shadowing, obsolete checkout workflow stub, no-op inventory repository, no-op UnitOfWork, placeholder branch/invoice/transfer/settlement APIs, invalid EF mappings, in-memory-only order/invoice persistence, client-trusted POS prices, invalid unattributed settlement creation, missing checkout retry protection, broken central NuGet package management, and the missing Infrastructure → Application project reference.
 
 ## 12. Development status
 
-### Implemented core platform development
-- [x] Product management
-- [x] Category management
-- [x] Artist management
-- [x] Branch management
-- [x] Customer management
-- [x] Inventory ledger and adjustments
-- [x] Branch transfers
+Implemented core platform development:
+- [x] Product/category/artist/branch/customer management
+- [x] Inventory ledger, adjustments, transfers, movement history
 - [x] Catalog data API
-- [x] POS checkout
-- [x] Checkout atomicity
-- [x] Checkout idempotency
-- [x] POS printable receipt data
-- [x] POS authorization roles
-- [x] POS returns/refunds
-- [x] Return inventory reversal
-- [x] Return settlement reversal
-- [x] Sale/refund accounting event capture
-- [x] Artist settlement aggregation/payment state
-- [x] Settlement payment accounting event
+- [x] POS checkout, atomicity, idempotency, receipt data, authorization roles
+- [x] POS returns/refunds and inventory/settlement/accounting reversals
+- [x] Artist settlement aggregation/payment state/accounting event
 - [x] Accounting transaction/reporting API
-- [x] nopCommerce integration core
-- [x] Product sync core
-- [x] Inventory sync core
-- [x] Branch selector core
-- [x] Order sync core
-- [x] nopCommerce target selected: 4.90.7
-- [x] nopCommerce 4.90 plugin metadata/BasePlugin adapter layer
-- [x] CI configured to compile adapters against official 4.90.7 source
+- [x] nopCommerce target locked to 4.90.7
+- [x] nopCommerce plugin metadata/BasePlugin adapters
+- [x] concrete product gateway
+- [x] concrete inventory gateway
+- [x] customer branch-selection persistence
+- [x] paid-order event consumer and product reverse mapping
+- [x] CI configured to compile against official nopCommerce 4.90.7 source
 
-### Remaining deployment/business decisions and feature wiring
-- [ ] Complete concrete nopCommerce product and inventory gateway implementations/event wiring.
-- [ ] Complete branch selector storefront UI/admin configuration wiring.
-- [ ] Complete order-completion event consumer wiring and deployment packaging.
-- [ ] Define final supported POS payment methods and method-specific fields (cash tender/change, card authorization references, etc.).
-- [ ] Define tax jurisdiction/calculation/posting rules.
-- [ ] Define POS discount/coupon authority and rules.
-- [ ] Define chart of accounts and decide whether full double-entry GL is required.
-- [ ] Define settlement approval/external-payment metadata requirements.
-- [ ] Define fiscal/legal receipt requirements beyond current durable reference and printable payload.
-- [ ] Generate/review EF migrations for upgradeable production databases.
+Business/policy decisions intentionally unresolved:
+- [ ] final POS payment methods and method-specific fields
+- [ ] tax jurisdiction/calculation/posting rules
+- [ ] POS discount/coupon authority and rules
+- [ ] chart of accounts / double-entry GL decision
+- [ ] settlement approval and external-payment metadata
+- [ ] fiscal/legal receipt requirements beyond current durable receipt payload
+- [ ] production EF migrations for schema upgrades
 
-### Validation phase after development
-- [x] Backend restore/build/test CI previously green after package-management fixes.
-- [x] Build version-independent nopCommerce integration projects in CI.
-- [ ] Confirm CI green with concrete nopCommerce 4.90.7 adapter compilation.
-- [ ] Add/fix deeper unit tests.
-- [ ] Add integration/API tests.
-- [ ] Exercise concurrent stock checkout behavior.
-- [ ] Verify Docker deployment.
-- [ ] Production-readiness/security review.
+Integration/deployment work still required:
+- [ ] expose branch-selector storefront UI in the deployed nopCommerce theme
+- [ ] add scheduled/manual product-sync trigger
+- [ ] add scheduled/manual inventory-sync trigger
+- [ ] run end-to-end paid nop order → Mercato transaction in a deployed environment
+- [ ] Docker deployment verification
+- [ ] production-readiness/security review
 
-## 13. Known policy decisions
+## 13. Validation status
 
-Known:
-- Mercato is product/pricing/inventory/business authority.
-- nopCommerce is storefront/cart/checkout/payment-gateway/shipping authority.
-- target nopCommerce release is 4.90.7 / .NET 9;
-- artist settlement is purchase-cost based;
-- inventory is ledger based;
-- sales create accounting transactions;
-- checkout must be retry-safe and atomic;
-- returns cannot exceed original sold quantity.
+Backend CI has reached successful restore, build, and tests. CI also checks out official nopCommerce `release-4.90.7` and compiles version-specific adapters. Integration changes must remain green against that exact source before a batch is considered complete.
 
-Unknown and must not be invented by future developers/AI:
-- jurisdiction-specific tax rules;
-- discount policy;
-- final chart of accounts/double-entry rules;
-- fiscal receipt rules;
-- settlement approval and transfer method rules;
-- payment-provider-specific metadata requirements.
+## 14. Known policy decisions
 
-## 14. Update policy
+Known: Mercato is product/pricing/inventory/business authority; nopCommerce is storefront/cart/checkout/payment-gateway/shipping authority; target nopCommerce release is 4.90.7 / .NET 9; artist settlement is purchase-cost based; inventory is ledger based; sales create accounting events; checkout is atomic and retry-safe; returns cannot exceed sold quantity.
 
-Update this document whenever implementation status, architecture, or a business rule changes. Future developers and AI agents should inspect the repository before trusting an unchecked item because code may have advanced since the last document edit.
+Do not invent unresolved tax, discount, GL, fiscal receipt, settlement approval, or payment-provider rules.
+
+## 15. Update policy
+
+Update this document whenever implementation status, architecture, or a business rule changes. Future developers and AI agents must inspect the repository before trusting stale unchecked items.
