@@ -12,14 +12,14 @@ public class EfRepository<T> : IRepository<T> where T : class
         _context = context;
     }
 
-    public async Task<T?> GetAsync(Guid id)
+    public async Task<T?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Set<T>().FindAsync(id);
+        return await _context.Set<T>().FindAsync([id], cancellationToken);
     }
 
-    public async Task AddAsync(T entity)
+    public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
-        await _context.Set<T>().AddAsync(entity);
+        await _context.Set<T>().AddAsync(entity, cancellationToken);
     }
 
     public void Remove(T entity)
