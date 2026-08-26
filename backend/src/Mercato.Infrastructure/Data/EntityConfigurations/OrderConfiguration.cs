@@ -1,11 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Mercato.Domain.Entities;
 
 namespace Mercato.Infrastructure.Data.EntityConfigurations;
 
-public class OrderConfiguration : IEntityTypeConfiguration<object>
+public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 {
-    public void Configure(EntityTypeBuilder<object> builder)
+    public void Configure(EntityTypeBuilder<Order> builder)
     {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.TotalAmount).HasPrecision(18, 2);
+
+        builder.HasMany(x => x.Items)
+            .WithOne()
+            .HasForeignKey(x => x.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
