@@ -11,10 +11,12 @@ namespace Mercato.Api.Controllers;
 public sealed class PosController : ControllerBase
 {
     private readonly IOrderCheckoutService _checkout;
+    private readonly IReturnService _returns;
 
-    public PosController(IOrderCheckoutService checkout)
+    public PosController(IOrderCheckoutService checkout, IReturnService returns)
     {
         _checkout = checkout;
+        _returns = returns;
     }
 
     [HttpPost("checkout")]
@@ -27,9 +29,21 @@ public sealed class PosController : ControllerBase
             var result = await _checkout.CheckoutAsync(request, cancellationToken);
             return Ok(result);
         }
-        catch (ArgumentException exception)
+        catch (InvalidOperationException exception)
         {
             return BadRequest(new { error = exception.Message });
+        }
+    }
+
+    [HttpPost("returns")]
+    public async Task<IActionResult> Return(
+        [FromBody] ReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _returns.ReturnAsync(request, cancellationToken);
+            return Ok(result);
         }
         catch (InvalidOperationException exception)
         {
