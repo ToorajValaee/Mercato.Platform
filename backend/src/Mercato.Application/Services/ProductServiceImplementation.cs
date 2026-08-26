@@ -32,7 +32,8 @@ public sealed class ProductServiceImplementation : IProductService
             request.Name,
             request.PurchasePrice,
             request.SalePrice,
-            request.CategoryId);
+            request.CategoryId,
+            request.ArtistId);
 
         return _productRepository.AddAsync(product, cancellationToken);
     }
