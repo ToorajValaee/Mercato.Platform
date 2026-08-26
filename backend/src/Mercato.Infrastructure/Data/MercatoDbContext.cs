@@ -15,6 +15,7 @@ public class MercatoDbContext : DbContext
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<BranchTransfer> BranchTransfers => Set<BranchTransfer>();
     public DbSet<SettlementLine> SettlementLines => Set<SettlementLine>();
+    public DbSet<ArtistSettlement> ArtistSettlements => Set<ArtistSettlement>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<AccountingTransaction> AccountingTransactions => Set<AccountingTransaction>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -31,6 +32,7 @@ public class MercatoDbContext : DbContext
         modelBuilder.ApplyConfiguration(new StockMovementConfiguration());
         modelBuilder.ApplyConfiguration(new BranchTransferConfiguration());
         modelBuilder.ApplyConfiguration(new SettlementLineConfiguration());
+        modelBuilder.ApplyConfiguration(new ArtistSettlementConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentConfiguration());
         modelBuilder.ApplyConfiguration(new AccountingTransactionConfiguration());
         modelBuilder.ApplyConfiguration(new CustomerConfiguration());
