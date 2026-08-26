@@ -30,7 +30,8 @@ public class ProductRepository : IProductRepository
                 product.Name,
                 product.PurchasePrice,
                 product.SalePrice,
-                product.CategoryId))
+                product.CategoryId,
+                product.ArtistId))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -43,7 +44,8 @@ public class ProductRepository : IProductRepository
                 product.Name,
                 product.PurchasePrice,
                 product.SalePrice,
-                product.CategoryId))
+                product.CategoryId,
+                product.ArtistId))
             .ToListAsync(cancellationToken);
     }
 
@@ -55,7 +57,8 @@ public class ProductRepository : IProductRepository
             Name = product.Name,
             PurchasePrice = product.PurchasePrice,
             SalePrice = product.SalePrice,
-            CategoryId = product.CategoryId
+            CategoryId = product.CategoryId,
+            ArtistId = product.ArtistId
         };
 
         _context.Products.Add(entity);
@@ -77,10 +80,17 @@ public class ProductRepository : IProductRepository
         entity.PurchasePrice = request.PurchasePrice;
         entity.SalePrice = request.SalePrice;
         entity.CategoryId = request.CategoryId;
+        entity.ArtistId = request.ArtistId;
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return new ProductDto(entity.Id, entity.Name, entity.PurchasePrice, entity.SalePrice, entity.CategoryId);
+        return new ProductDto(
+            entity.Id,
+            entity.Name,
+            entity.PurchasePrice,
+            entity.SalePrice,
+            entity.CategoryId,
+            entity.ArtistId);
     }
 
     public async Task<bool> ArchiveAsync(Guid id, CancellationToken cancellationToken = default)
