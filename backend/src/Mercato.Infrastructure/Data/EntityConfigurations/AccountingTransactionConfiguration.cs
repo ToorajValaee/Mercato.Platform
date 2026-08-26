@@ -14,5 +14,6 @@ public class AccountingTransactionConfiguration : IEntityTypeConfiguration<Accou
         builder.Property(x => x.Description).HasMaxLength(500);
         builder.HasIndex(x => x.OrderId);
         builder.HasIndex(x => x.InvoiceId);
+        builder.HasIndex(x => x.ArtistSettlementId);
     }
 }
