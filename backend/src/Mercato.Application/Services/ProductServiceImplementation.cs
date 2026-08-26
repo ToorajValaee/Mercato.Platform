@@ -5,46 +5,69 @@ namespace Mercato.Application.Services;
 
 public sealed class ProductServiceImplementation : IProductService
 {
-    private readonly IProductRepository _productRepository;
+    private readonly IProductRepository _products;
+    private readonly ICategoryRepository _categories;
+    private readonly IArtistRepository _artists;
 
-    public ProductServiceImplementation(IProductRepository productRepository)
+    public ProductServiceImplementation(
+        IProductRepository products,
+        ICategoryRepository categories,
+        IArtistRepository artists)
     {
-        _productRepository = productRepository;
+        _products = products;
+        _categories = categories;
+        _artists = artists;
     }
-
-    public string ServiceName => "Product Management Service";
 
     public async Task<int> GetProductCountAsync(CancellationToken cancellationToken = default)
-    {
-        var products = await _productRepository.GetAllAsync(cancellationToken);
-        return products.Count;
-    }
+        => (await _products.GetAllAsync(cancellationToken)).Count;
 
     public Task<IReadOnlyList<ProductDto>> GetProductsAsync(CancellationToken cancellationToken = default)
-    {
-        return _productRepository.GetAllAsync(cancellationToken);
-    }
+        => _products.GetAllAsync(cancellationToken);
 
-    public Task<ProductDto> CreateAsync(CreateProductRequest request, CancellationToken cancellationToken = default)
+    public async Task<ProductDto> CreateAsync(CreateProductRequest request, CancellationToken cancellationToken = default)
     {
+        await ValidateAsync(request.Name, request.PurchasePrice, request.SalePrice, request.CategoryId, request.ArtistId, cancellationToken);
         var product = new ProductDto(
             Guid.NewGuid(),
-            request.Name,
+            request.Name.Trim(),
+            Normalize(request.Sku),
             request.PurchasePrice,
             request.SalePrice,
             request.CategoryId,
             request.ArtistId);
-
-        return _productRepository.AddAsync(product, cancellationToken);
+        return await _products.AddAsync(product, cancellationToken);
     }
 
-    public Task<ProductDto?> UpdateAsync(Guid id, UpdateProductRequest request, CancellationToken cancellationToken = default)
+    public async Task<ProductDto?> UpdateAsync(Guid id, UpdateProductRequest request, CancellationToken cancellationToken = default)
     {
-        return _productRepository.UpdateAsync(id, request, cancellationToken);
+        await ValidateAsync(request.Name, request.PurchasePrice, request.SalePrice, request.CategoryId, request.ArtistId, cancellationToken);
+        return await _products.UpdateAsync(id, request with
+        {
+            Name = request.Name.Trim(),
+            Sku = Normalize(request.Sku)
+        }, cancellationToken);
     }
 
     public Task<bool> ArchiveAsync(Guid id, CancellationToken cancellationToken = default)
+        => _products.ArchiveAsync(id, cancellationToken);
+
+    private async Task ValidateAsync(
+        string name,
+        decimal purchasePrice,
+        decimal salePrice,
+        Guid? categoryId,
+        Guid? artistId,
+        CancellationToken cancellationToken)
     {
-        return _productRepository.ArchiveAsync(id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Product name is required.", nameof(name));
+        if (purchasePrice < 0) throw new ArgumentOutOfRangeException(nameof(purchasePrice));
+        if (salePrice <= 0) throw new ArgumentOutOfRangeException(nameof(salePrice));
+        if (categoryId is Guid category && category != Guid.Empty && await _categories.GetAsync(category, cancellationToken) is null)
+            throw new InvalidOperationException("Category was not found.");
+        if (artistId is Guid artist && artist != Guid.Empty && await _artists.GetAsync(artist, cancellationToken) is null)
+            throw new InvalidOperationException("Artist was not found.");
     }
+
+    private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
