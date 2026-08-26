@@ -16,10 +16,10 @@ public static class DependencyInjection
             ?? configuration["MERCATO_CONNECTION_STRING"]
             ?? throw new InvalidOperationException("Mercato database connection string is missing.");
 
-        services.AddDbContext<MercatoDbContext>(options =>
-            options.UseNpgsql(connectionString));
+        services.AddDbContext<MercatoDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IBranchRepository, BranchRepository>();
         services.AddScoped<IInventoryRepository, InventoryRepository>();
         services.AddScoped<IBranchTransferRepository, BranchTransferRepository>();
