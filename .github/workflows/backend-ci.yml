@@ -55,3 +55,25 @@ jobs:
           dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
           dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
           dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+
+      - name: Stage nopCommerce plugin packages
+        run: |
+          set -euo pipefail
+          rm -rf dist/nopCommerce-4.90.7
+          mkdir -p dist/nopCommerce-4.90.7
+          for plugin in Connector ProductSync InventorySync BranchSelector OrderSync; do
+            project="integrations/nopCommerce/Mercato.${plugin}.Plugin"
+            assembly="Nop.Plugin.Mercato.${plugin}"
+            target="dist/nopCommerce-4.90.7/${assembly}"
+            mkdir -p "$target"
+            cp "$project/plugin.json" "$target/plugin.json"
+            cp "$project/bin/Release/net9.0/${assembly}.dll" "$target/${assembly}.dll"
+            cp "integrations/nopCommerce/Mercato.NopCommerce.Core/bin/Release/net9.0/Mercato.NopCommerce.Core.dll" "$target/Mercato.NopCommerce.Core.dll"
+          done
+
+      - name: Upload nopCommerce plugin packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: mercato-nopcommerce-4.90.7-plugins
+          path: dist/nopCommerce-4.90.7
+          if-no-files-found: error
