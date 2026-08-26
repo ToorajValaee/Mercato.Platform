@@ -10,5 +10,7 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
     {
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Quantity).HasPrecision(18, 3);
+        builder.Property(x => x.Type).HasMaxLength(200).IsRequired();
+        builder.HasIndex(x => new { x.BranchId, x.ProductId, x.CreatedAtUtc });
     }
 }
