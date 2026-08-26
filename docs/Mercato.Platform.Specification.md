@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.1
+Version: 1.2
 Purpose: Source of truth for product requirements, business flows, architecture decisions, implementation status, known gaps, and remaining development work.
 
 ## 1. Vision
@@ -82,14 +82,16 @@ The current implementation uses a consolidated Clean Architecture solution rathe
 3. Search or scan products.
 4. Check branch inventory.
 5. Add products to cart.
-6. Checkout using server-authoritative product prices.
-7. Persist Order and OrderItems.
-8. Reduce inventory.
-9. Persist Invoice linked to the Order.
-10. Record artist settlement lines using product purchase cost.
-11. Process/record payment.
-12. Post accounting transaction.
-13. Return receipt details.
+6. Select payment method.
+7. Checkout using server-authoritative product prices.
+8. Persist Order and OrderItems.
+9. Reduce inventory.
+10. Persist Invoice linked to the Order.
+11. Record artist settlement lines using product purchase cost.
+12. Persist Payment.
+13. Post AccountingTransaction for the sale.
+14. Commit the complete checkout transaction atomically.
+15. Return order, invoice, payment, total, and durable receipt reference.
 
 ## 6. Core Business Modules
 
@@ -149,6 +151,8 @@ Requirements:
 - Payment records
 - Financial reports
 
+Current sale posting model persists one `AccountingTransaction` per completed POS checkout with OrderId, InvoiceId, BranchId, Amount, Type, Description, and timestamp. This is a transaction/event record, not yet a full double-entry general ledger.
+
 ### POS
 
 Requirements:
@@ -162,6 +166,7 @@ Requirements:
 - Artist settlement recording
 - Payment handling
 - Receipt response
+- Atomic checkout transaction
 - Offline-ready consideration
 
 ### Catalog
@@ -255,17 +260,40 @@ Implemented:
 - [x] Invoice-to-Order link
 - [x] Product-to-Artist ownership field
 - [x] Purchase-cost settlement line persistence
+- [x] Payment method required by checkout request
+- [x] Payment persistence linked to Order
+- [x] Durable unique receipt/payment reference
+- [x] AccountingTransaction persistence for completed sale
+- [x] EF transaction boundary across order, stock, invoice, settlement, payment, and accounting operations
 - [x] POS checkout API endpoint: `POST /api/pos/checkout`
-- [x] Typed checkout result with OrderId, InvoiceId, Total, Status
+- [x] Checkout result returns OrderId, InvoiceId, PaymentId, Total, ReceiptReference, and Status
 
 Still required:
 
-- [ ] Transaction boundary across order, stock, invoice, settlement, payment, and accounting
-- [ ] Payment capture/recording in POS workflow
-- [ ] Accounting transaction posting from checkout
-- [ ] Receipt number/model and printable receipt payload
+- [ ] Printable receipt payload with line-level display data
 - [ ] POS-specific authorization roles/policies
 - [ ] Customer optionality/guest sale rules verification
+- [ ] Cash tender/change handling if required
+- [ ] Card/gateway authorization metadata if required
+- [ ] Idempotency key for retried checkout requests
+
+### Accounting
+
+Implemented:
+
+- [x] Payment entity persisted through typed repository
+- [x] AccountingTransaction entity persisted through typed repository
+- [x] Completed POS sale creates accounting transaction
+- [x] Sale transaction links Order, Invoice, Branch, and Amount
+
+Still required:
+
+- [ ] Define chart of accounts
+- [ ] Implement double-entry journal model/posting rules if required
+- [ ] Tax posting rules
+- [ ] Refund/return accounting
+- [ ] Settlement payable accounting
+- [ ] Accounting reports
 
 ### Artist settlement
 
@@ -290,15 +318,18 @@ Resolved:
 
 - [x] Product EF mapping referenced a nonexistent `Price` property; now maps PurchasePrice and SalePrice.
 - [x] SettlementLine EF mapping referenced a nonexistent `Amount` property; now maps PurchaseAmount.
+- [x] Payment EF mapping was an empty `object` configuration; it now maps the real Payment entity.
 - [x] Order and Invoice services previously returned in-memory objects without persistence; repository-backed persistence has been introduced.
 - [x] Checkout previously trusted client UnitPrice; authoritative SalePrice is now loaded from Mercato product data.
 - [x] Checkout previously generated invalid settlement summaries without a valid ArtistId; checkout now records attributable settlement lines instead.
+- [x] UnitOfWork previously returned zero without calling EF; it now saves through MercatoDbContext and can execute an atomic EF transaction.
 
 To verify later:
 
 - [ ] Database migrations match the current domain model.
 - [ ] Build succeeds after all development batches are complete.
-- [ ] Existing database schema migration strategy for new ArtistId and SettlementLine.OrderId fields.
+- [ ] Existing database schema migration strategy for ArtistId, SettlementLine.OrderId, Payment.Reference, and AccountingTransaction.
+- [ ] Concurrent checkout/stock locking behavior under load.
 
 ## 10. Remaining Work List
 
@@ -308,8 +339,8 @@ To verify later:
 - [ ] Complete Product module
 - [ ] Complete Branch module
 - [ ] Complete Artist management module
-- [ ] Complete Accounting module
-- [ ] Complete POS payment/accounting/receipt workflow
+- [ ] Complete Accounting module beyond sale transaction capture
+- [ ] Complete POS receipt/idempotency/authorization workflow
 - [ ] Complete artist settlement aggregation/payment workflow
 - [ ] Complete Catalog generator
 - [ ] Complete nopCommerce connector plugin
@@ -334,20 +365,21 @@ To verify later:
 Known:
 
 - Mercato is the business authority.
-- nopCommerce is the commerce/storefront authority only for storefront, SEO, cart, checkout UI, payments, and shipping integrations.
+- nopCommerce is the commerce/storefront authority only for storefront, SEO, cart, checkout UI, payment gateways, and shipping integrations.
 - Inventory is ledger/service driven in Mercato.
 - Artist settlement uses purchase cost, not revenue sharing.
 - POS checkout must use server-side prices.
+- POS checkout now records payment and accounting data atomically with the sale.
 
 Unknown or requiring explicit later decision:
 
 - Final supported POS payment methods.
 - Tax calculation rules and tax jurisdiction behavior.
 - Discount/coupon authority for POS.
-- Receipt numbering format and fiscal/legal requirements.
+- Fiscal/legal receipt requirements beyond the current durable receipt reference.
 - Whether anonymous/guest POS customers are represented by `Guid.Empty`, nullable customer IDs, or a system customer.
 - Settlement payment schedule and approval workflow.
-- Accounting chart of accounts and posting rules.
+- Accounting chart of accounts and double-entry posting rules.
 - Exact nopCommerce version targeted by the plugins.
 
 ## 12. Update Policy
