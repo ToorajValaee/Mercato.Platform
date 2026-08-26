@@ -4,6 +4,7 @@ using Nop.Core.Domain.Logging;
 using Nop.Core.Domain.Orders;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
+using Nop.Services.Customers;
 using Nop.Services.Events;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
@@ -19,6 +20,7 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
     private readonly OrderSyncCore _sync;
     private readonly IOrderService _orders;
     private readonly IProductService _products;
+    private readonly ICustomerService _customers;
     private readonly IGenericAttributeService _attributes;
     private readonly IConfiguration _configuration;
     private readonly ILogger _logger;
@@ -27,6 +29,7 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
         OrderSyncCore sync,
         IOrderService orders,
         IProductService products,
+        ICustomerService customers,
         IGenericAttributeService attributes,
         IConfiguration configuration,
         ILogger logger)
@@ -34,6 +37,7 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
         _sync = sync;
         _orders = orders;
         _products = products;
+        _customers = customers;
         _attributes = attributes;
         _configuration = configuration;
         _logger = logger;
@@ -46,6 +50,9 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
         try
         {
             var branchText = await _attributes.GetAttributeAsync<string>(order, BranchAttribute, order.StoreId);
+            var customer = await _customers.GetCustomerByIdAsync(order.CustomerId);
+            if (string.IsNullOrWhiteSpace(branchText) && customer is not null)
+                branchText = await _attributes.GetAttributeAsync<string>(customer, BranchAttribute, order.StoreId);
             if (string.IsNullOrWhiteSpace(branchText))
                 branchText = _configuration["Mercato:DefaultBranchId"];
 
@@ -53,6 +60,8 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
                 throw new InvalidOperationException($"nopCommerce order {order.Id} has no valid Mercato branch mapping.");
 
             var customerText = await _attributes.GetAttributeAsync<string>(order, CustomerAttribute, order.StoreId);
+            if (string.IsNullOrWhiteSpace(customerText) && customer is not null)
+                customerText = await _attributes.GetAttributeAsync<string>(customer, CustomerAttribute, order.StoreId);
             Guid.TryParse(customerText, out var customerId);
 
             var items = new List<CommerceOrderItem>();
