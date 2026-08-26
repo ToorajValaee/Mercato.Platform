@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.6
+Version: 1.7
 Purpose: Source of truth for product requirements, architecture, business rules, implementation status, known gaps, and continuation work.
 
 ## 1. Product boundary
@@ -135,15 +135,21 @@ This is a durable accounting event ledger, not a finalized double-entry general 
 
 ## 9. nopCommerce integration
 
-Version-agnostic integration core is implemented under `integrations/nopCommerce`:
-- `Mercato.NopCommerce.Core`: authenticated HTTP client, health, catalog, idempotent order synchronization;
-- `Mercato.Connector.Plugin`: connection/health core;
-- `Mercato.ProductSync.Plugin`: Mercato catalog → `INopProductGateway` upsert workflow;
-- `Mercato.InventorySync.Plugin`: branch availability → `INopInventoryGateway` stock workflow;
-- `Mercato.BranchSelector.Plugin`: branch-specific availability workflow;
-- `Mercato.OrderSync.Plugin`: completed nopCommerce order → Mercato checkout flow using `nop:{OrderId}` idempotency key.
+Target deployment release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**.
 
-The remaining thin nopCommerce adapter layer is intentionally not bound to concrete nop assemblies until the exact target nopCommerce release is selected. That adapter must implement the two gateway interfaces, plugin registration classes, event consumers/admin configuration pages, and version-specific `plugin.json` metadata.
+Implemented under `integrations/nopCommerce`:
+- `Mercato.NopCommerce.Core`: authenticated HTTP client, health, catalog, idempotent order synchronization;
+- `Mercato.Connector.Plugin`: connection/health core plus nopCommerce `BasePlugin` adapter and `plugin.json`;
+- `Mercato.ProductSync.Plugin`: Mercato catalog → `INopProductGateway` workflow plus nopCommerce adapter/metadata;
+- `Mercato.InventorySync.Plugin`: branch availability → `INopInventoryGateway` workflow plus nopCommerce adapter/metadata;
+- `Mercato.BranchSelector.Plugin`: branch-specific availability workflow plus nopCommerce adapter/metadata;
+- `Mercato.OrderSync.Plugin`: completed nopCommerce order → Mercato checkout using `nop:{OrderId}` plus nopCommerce adapter/metadata.
+
+All integration projects target `net9.0`. Their `plugin.json` files declare `SupportedVersions: [ "4.90" ]` and assembly names follow nopCommerce plugin conventions. The project files accept `NopCommerceRoot`; when supplied they reference the actual 4.90.7 `src/Presentation/Nop.Web/Nop.Web.csproj`, allowing adapter compilation against the exact nopCommerce API surface.
+
+CI checks out the official `release-4.90.7` source tag and builds the Mercato plugin adapters against it in addition to the version-independent integration cores.
+
+Remaining integration work is feature-level nopCommerce wiring where required by storefront UX: concrete product/inventory gateway implementations, event consumers, branch-selection UI/admin configuration, and deployment packaging. These must preserve Mercato as product/inventory/business authority.
 
 ## 10. Database initialization
 
@@ -190,14 +196,19 @@ Resolved during development:
 - [x] Artist settlement aggregation/payment state
 - [x] Settlement payment accounting event
 - [x] Accounting transaction/reporting API
-- [x] nopCommerce version-agnostic connector core
+- [x] nopCommerce integration core
 - [x] Product sync core
 - [x] Inventory sync core
 - [x] Branch selector core
 - [x] Order sync core
+- [x] nopCommerce target selected: 4.90.7
+- [x] nopCommerce 4.90 plugin metadata/BasePlugin adapter layer
+- [x] CI configured to compile adapters against official 4.90.7 source
 
-### Blocked by explicit deployment/business decisions
-- [ ] Bind thin plugin adapters to the selected nopCommerce version.
+### Remaining deployment/business decisions and feature wiring
+- [ ] Complete concrete nopCommerce product and inventory gateway implementations/event wiring.
+- [ ] Complete branch selector storefront UI/admin configuration wiring.
+- [ ] Complete order-completion event consumer wiring and deployment packaging.
 - [ ] Define final supported POS payment methods and method-specific fields (cash tender/change, card authorization references, etc.).
 - [ ] Define tax jurisdiction/calculation/posting rules.
 - [ ] Define POS discount/coupon authority and rules.
@@ -207,13 +218,13 @@ Resolved during development:
 - [ ] Generate/review EF migrations for upgradeable production databases.
 
 ### Validation phase after development
-- [ ] Build all backend projects.
-- [ ] Build version-agnostic nopCommerce integration projects.
-- [ ] Add/fix unit tests.
+- [x] Backend restore/build/test CI previously green after package-management fixes.
+- [x] Build version-independent nopCommerce integration projects in CI.
+- [ ] Confirm CI green with concrete nopCommerce 4.90.7 adapter compilation.
+- [ ] Add/fix deeper unit tests.
 - [ ] Add integration/API tests.
 - [ ] Exercise concurrent stock checkout behavior.
 - [ ] Verify Docker deployment.
-- [ ] Verify CI.
 - [ ] Production-readiness/security review.
 
 ## 13. Known policy decisions
@@ -221,14 +232,14 @@ Resolved during development:
 Known:
 - Mercato is product/pricing/inventory/business authority.
 - nopCommerce is storefront/cart/checkout/payment-gateway/shipping authority.
-- artist settlement is purchase-cost based.
-- inventory is ledger based.
-- sales create accounting transactions.
-- checkout must be retry-safe and atomic.
+- target nopCommerce release is 4.90.7 / .NET 9;
+- artist settlement is purchase-cost based;
+- inventory is ledger based;
+- sales create accounting transactions;
+- checkout must be retry-safe and atomic;
 - returns cannot exceed original sold quantity.
 
 Unknown and must not be invented by future developers/AI:
-- exact nopCommerce target release;
 - jurisdiction-specific tax rules;
 - discount policy;
 - final chart of accounts/double-entry rules;
