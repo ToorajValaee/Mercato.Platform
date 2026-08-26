@@ -6,6 +6,8 @@ namespace Mercato.ProductSync.Plugin;
 
 public sealed class NopProductGateway : INopProductGateway
 {
+    public const string MercatoProductIdPrefix = "Mercato.ProductId=";
+
     private readonly IProductService _products;
 
     public NopProductGateway(IProductService products)
@@ -18,6 +20,7 @@ public sealed class NopProductGateway : INopProductGateway
         var sku = product.NopSku;
         var entity = await _products.GetProductBySkuAsync(sku);
         var now = DateTime.UtcNow;
+        var identity = $"{MercatoProductIdPrefix}{product.ProductId:D}";
 
         if (entity is null)
         {
@@ -27,6 +30,7 @@ public sealed class NopProductGateway : INopProductGateway
                 VisibleIndividually = true,
                 Name = product.Name,
                 Sku = sku,
+                AdminComment = identity,
                 Price = product.SalePrice,
                 ManageInventoryMethodId = (int)ManageInventoryMethod.ManageStock,
                 Published = true,
@@ -41,6 +45,7 @@ public sealed class NopProductGateway : INopProductGateway
         }
 
         entity.Name = product.Name;
+        entity.AdminComment = identity;
         entity.Price = product.SalePrice;
         entity.Published = true;
         entity.UpdatedOnUtc = now;
