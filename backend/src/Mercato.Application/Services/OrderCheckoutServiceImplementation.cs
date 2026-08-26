@@ -107,6 +107,12 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                 cancellationToken);
         }
 
-        return new CheckoutResult(true, $"Order {order.Id} and invoice {invoice.Id} created.");
+        return new CheckoutResult
+        {
+            OrderId = order.Id,
+            InvoiceId = invoice.Id,
+            Total = total,
+            Status = "Completed"
+        };
     }
 }
