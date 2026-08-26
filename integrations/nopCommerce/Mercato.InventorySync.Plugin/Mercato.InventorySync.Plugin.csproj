@@ -1,1 +1,6 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><ProjectReference Include="../Mercato.NopCommerce.Core/Mercato.NopCommerce.Core.csproj" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>Nop.Plugin.Mercato.InventorySync</AssemblyName><NopCommerceVersion>4.90.7</NopCommerceVersion></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Mercato.NopCommerce.Core/Mercato.NopCommerce.Core.csproj" /><ProjectReference Include="$(NopCommerceRoot)/src/Presentation/Nop.Web/Nop.Web.csproj" Condition="'$(NopCommerceRoot)' != ''" /></ItemGroup>
+  <ItemGroup Condition="'$(NopCommerceRoot)' == ''"><Compile Remove="NopPlugin.cs" /></ItemGroup>
+  <ItemGroup><Content Include="plugin.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+</Project>
