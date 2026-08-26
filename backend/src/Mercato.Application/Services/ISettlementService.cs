@@ -12,6 +12,14 @@ public interface ISettlementService
         decimal purchaseUnitPrice,
         CancellationToken cancellationToken = default);
 
+    Task RecordReturnAsync(
+        Guid orderId,
+        Guid artistId,
+        Guid productId,
+        int quantity,
+        decimal purchaseUnitPrice,
+        CancellationToken cancellationToken = default);
+
     Task<ArtistSettlement> CalculateAsync(
         Guid artistId,
         DateTime from,
