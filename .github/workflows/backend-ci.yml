@@ -45,6 +45,14 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Prepare nopCommerce PostgreSQL extensions
+        run: |
+          set -euo pipefail
+          PG_CONTAINER="$(docker ps --filter "ancestor=postgres:16" --format '{{.ID}}' | head -n 1)"
+          test -n "$PG_CONTAINER"
+          docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 \
+            -c 'CREATE EXTENSION IF NOT EXISTS citext;'
+
       - name: Restore backend
         run: dotnet restore backend/Mercato.Platform.sln
 
