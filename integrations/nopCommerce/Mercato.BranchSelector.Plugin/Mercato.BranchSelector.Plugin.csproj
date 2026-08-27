@@ -30,6 +30,7 @@
   <ItemGroup Condition="'$(NopCommerceRoot)' == ''">
     <Compile Remove="NopPlugin.cs" />
     <Compile Remove="NopStartup.cs" />
+    <Compile Remove="RouteProvider.cs" />
     <Compile Remove="BranchSelectionService.cs" />
     <Compile Remove="BranchSelectorViewComponent.cs" />
     <Compile Remove="BranchSelectorController.cs" />
