@@ -1,6 +1,42 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>Nop.Plugin.Mercato.BranchSelector</AssemblyName><NopCommerceVersion>4.90.7</NopCommerceVersion></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Mercato.NopCommerce.Core/Mercato.NopCommerce.Core.csproj" /><ProjectReference Include="$(NopCommerceRoot)/src/Presentation/Nop.Web/Nop.Web.csproj" Condition="'$(NopCommerceRoot)' != ''" /></ItemGroup>
-  <ItemGroup Condition="'$(NopCommerceRoot)' == ''"><Compile Remove="NopPlugin.cs" /><Compile Remove="NopStartup.cs" /><Compile Remove="BranchSelectionService.cs" /><Compile Remove="BranchSelectorViewComponent.cs" /><Compile Remove="BranchSelectorController.cs" /></ItemGroup>
-  <ItemGroup><Content Include="plugin.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Nop.Plugin.Mercato.BranchSelector</AssemblyName>
+    <NopCommerceVersion>4.90.7</NopCommerceVersion>
+    <OutputPath Condition="'$(NopCommerceRoot)' != ''">$(NopCommerceRoot)/src/Presentation/Nop.Web/Plugins/Mercato.BranchSelector</OutputPath>
+    <OutDir Condition="'$(NopCommerceRoot)' != ''">$(OutputPath)</OutDir>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="plugin.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="plugin.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Mercato.NopCommerce.Core/Mercato.NopCommerce.Core.csproj" />
+    <ProjectReference Include="$(NopCommerceRoot)/src/Presentation/Nop.Web/Nop.Web.csproj" Condition="'$(NopCommerceRoot)' != ''" />
+    <ClearPluginAssemblies Include="$(NopCommerceRoot)/src/Build/ClearPluginAssemblies.proj" Condition="'$(NopCommerceRoot)' != ''" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(NopCommerceRoot)' == ''">
+    <Compile Remove="NopPlugin.cs" />
+    <Compile Remove="NopStartup.cs" />
+    <Compile Remove="BranchSelectionService.cs" />
+    <Compile Remove="BranchSelectorViewComponent.cs" />
+    <Compile Remove="BranchSelectorController.cs" />
+  </ItemGroup>
+
+  <Target Name="NopTarget" AfterTargets="Build" Condition="'$(NopCommerceRoot)' != ''">
+    <MSBuild Projects="@(ClearPluginAssemblies)" Properties="PluginPath=$(OutDir)" Targets="NopClear" />
+  </Target>
+
 </Project>
