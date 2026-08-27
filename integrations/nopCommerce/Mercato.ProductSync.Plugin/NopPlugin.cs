@@ -1,10 +1,11 @@
 using Nop.Core.Domain.ScheduleTasks;
+using Nop.Services.Common;
 using Nop.Services.Plugins;
 using Nop.Services.ScheduleTasks;
 
 namespace Mercato.ProductSync.Plugin;
 
-public sealed class MercatoProductSyncPlugin : BasePlugin
+public sealed class MercatoProductSyncPlugin : BasePlugin, IMiscPlugin
 {
     private readonly IScheduleTaskService _scheduleTasks;
 
