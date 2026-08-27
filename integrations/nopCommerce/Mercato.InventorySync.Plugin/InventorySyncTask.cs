@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+using Mercato.NopCommerce.Core;
 using Nop.Services.ScheduleTasks;
 
 namespace Mercato.InventorySync.Plugin;
@@ -6,9 +6,11 @@ namespace Mercato.InventorySync.Plugin;
 public sealed class InventorySyncTask : IScheduleTask
 {
     private readonly InventorySyncCore _sync;
-    private readonly IConfiguration _configuration;
+    private readonly IMercatoConfiguration _configuration;
 
-    public InventorySyncTask(InventorySyncCore sync, IConfiguration configuration)
+    public InventorySyncTask(
+        InventorySyncCore sync,
+        IMercatoConfiguration configuration)
     {
         _sync = sync;
         _configuration = configuration;
@@ -16,10 +18,10 @@ public sealed class InventorySyncTask : IScheduleTask
 
     public Task ExecuteAsync()
     {
-        var value = _configuration["Mercato:DefaultBranchId"];
-        if (!Guid.TryParse(value, out var branchId) || branchId == Guid.Empty)
-            throw new InvalidOperationException("Mercato:DefaultBranchId is required for scheduled inventory sync.");
+        var branchId = _configuration.DefaultBranchId;
+        if (branchId is null || branchId == Guid.Empty)
+            throw new InvalidOperationException("A default Mercato branch is required for scheduled inventory sync.");
 
-        return _sync.SyncBranchAsync(branchId);
+        return _sync.SyncBranchAsync(branchId.Value);
     }
 }
