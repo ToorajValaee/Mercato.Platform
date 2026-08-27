@@ -1,5 +1,4 @@
 using Mercato.NopCommerce.Core;
-using Microsoft.Extensions.Configuration;
 using Nop.Core.Domain.Logging;
 using Nop.Core.Domain.Orders;
 using Nop.Services.Catalog;
@@ -20,7 +19,7 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
     private readonly IProductService _products;
     private readonly ICustomerService _customers;
     private readonly IGenericAttributeService _attributes;
-    private readonly IConfiguration _configuration;
+    private readonly IMercatoConfiguration _configuration;
     private readonly ILogger _logger;
 
     public OrderPaidConsumer(
@@ -29,7 +28,7 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
         IProductService products,
         ICustomerService customers,
         IGenericAttributeService attributes,
-        IConfiguration configuration,
+        IMercatoConfiguration configuration,
         ILogger logger)
     {
         _sync = sync;
@@ -51,10 +50,12 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
             var customer = await _customers.GetCustomerByIdAsync(order.CustomerId);
             if (string.IsNullOrWhiteSpace(branchText) && customer is not null)
                 branchText = await _attributes.GetAttributeAsync<string>(customer, MercatoNopDefaults.BranchIdAttribute, order.StoreId);
-            if (string.IsNullOrWhiteSpace(branchText))
-                branchText = _configuration[MercatoNopDefaults.DefaultBranchIdConfigurationKey];
 
-            if (!Guid.TryParse(branchText, out var branchId) || branchId == Guid.Empty)
+            Guid branchId;
+            if (!Guid.TryParse(branchText, out branchId) || branchId == Guid.Empty)
+                branchId = _configuration.DefaultBranchId ?? Guid.Empty;
+
+            if (branchId == Guid.Empty)
                 throw new InvalidOperationException($"nopCommerce order {order.Id} has no valid Mercato branch mapping.");
 
             var customerText = await _attributes.GetAttributeAsync<string>(order, MercatoNopDefaults.CustomerIdAttribute, order.StoreId);
