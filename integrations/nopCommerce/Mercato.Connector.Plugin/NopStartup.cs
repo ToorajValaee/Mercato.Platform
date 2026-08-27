@@ -13,12 +13,16 @@ public sealed class NopStartup : INopStartup
     public void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddHttpClient("Mercato.Connector").WithProxy();
+        services.TryAddScoped<IMercatoConfiguration, NopMercatoConfiguration>();
         services.TryAddScoped(sp =>
         {
+            var configurationProvider = sp.GetRequiredService<IMercatoConfiguration>();
+            if (string.IsNullOrWhiteSpace(configurationProvider.BaseUrl))
+                throw new InvalidOperationException("Mercato Base URL is not configured. Configure the Mercato Connector plugin or set Mercato:BaseUrl.");
+
             var options = new MercatoConnectorOptions(
-                configuration[MercatoNopDefaults.BaseUrlConfigurationKey]
-                    ?? throw new InvalidOperationException($"{MercatoNopDefaults.BaseUrlConfigurationKey} is required."),
-                configuration[MercatoNopDefaults.BearerTokenConfigurationKey] ?? string.Empty);
+                configurationProvider.BaseUrl,
+                configurationProvider.BearerToken);
             var factory = sp.GetRequiredService<IHttpClientFactory>();
             return new MercatoApiClient(factory.CreateClient("Mercato.Connector"), options);
         });
