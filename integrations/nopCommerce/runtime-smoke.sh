@@ -223,13 +223,19 @@ if [[ ! -f "$PLUGINS_INFO" ]]; then
   exit 1
 fi
 
-# The installer queues available plugins. A clean process restart applies the installation queue.
+# The installer queues available plugins. The first clean restart installs plugins and applies
+# nopCommerce core update migrations, including the 4.80 advanced-ACL migration. Because nop's
+# AppStartedConsumer installs permissions before applying those migrations in the same process,
+# restart once more so authorization uses a fresh cache over the post-migration permission state.
 stop_nop
 sleep 1
 start_nop
 wait_for_url "$BASE_URL/login"
-
 verify_plugin_state
+stop_nop
+sleep 1
+start_nop
+wait_for_url "$BASE_URL/login"
 
 # The Connector configuration endpoint must exist and remain protected before authentication.
 CONFIG_GUEST_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$BASE_URL/Admin/MercatoConnector/Configure")"
