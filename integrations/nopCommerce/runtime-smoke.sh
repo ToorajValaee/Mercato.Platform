@@ -13,6 +13,7 @@ if [[ ! -f "$NOP_WEB/Nop.Web.csproj" ]]; then
   exit 2
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_URL="${NOP_BASE_URL:-http://127.0.0.1:5080}"
 DB_CONNECTION="${NOP_DB_CONNECTION_STRING:-Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres}"
 ADMIN_EMAIL="${NOP_ADMIN_EMAIL:-admin@mercato.local}"
@@ -20,6 +21,7 @@ ADMIN_PASSWORD="${NOP_ADMIN_PASSWORD:-MercatoRuntime123!}"
 CONFIG_BASE_URL="${MERCATO_RUNTIME_BASE_URL:-http://127.0.0.1:5099}"
 CONFIG_BEARER_TOKEN="${MERCATO_RUNTIME_BEARER_TOKEN:-runtime-token}"
 CONFIG_DEFAULT_BRANCH_ID="${MERCATO_RUNTIME_DEFAULT_BRANCH_ID:-11111111-1111-1111-1111-111111111111}"
+SECOND_BRANCH_ID="${MERCATO_RUNTIME_SECOND_BRANCH_ID:-22222222-2222-2222-2222-222222222222}"
 WORK_DIR="${RUNNER_TEMP:-/tmp}/mercato-nopcommerce-runtime"
 COOKIE_JAR="$WORK_DIR/cookies.txt"
 INSTALL_PAGE="$WORK_DIR/install.html"
@@ -29,8 +31,10 @@ LOGIN_RESULT="$WORK_DIR/login-result.html"
 CONFIG_PAGE="$WORK_DIR/configure.html"
 CONFIG_SAVE_RESULT="$WORK_DIR/configure-save.html"
 HOME_PAGE="$WORK_DIR/home.html"
+BRANCH_RESULT="$WORK_DIR/branch-result.html"
 HEADERS="$WORK_DIR/headers.txt"
 LOG_FILE="$WORK_DIR/nopcommerce.log"
+STUB_LOG_FILE="$WORK_DIR/mercato-stub.log"
 PLUGINS_INFO="$NOP_WEB/App_Data/plugins.json"
 
 EXPECTED_PLUGINS=(
@@ -45,14 +49,20 @@ mkdir -p "$WORK_DIR"
 rm -f \
   "$COOKIE_JAR" "$INSTALL_PAGE" "$INSTALL_RESULT" \
   "$LOGIN_PAGE" "$LOGIN_RESULT" "$CONFIG_PAGE" "$CONFIG_SAVE_RESULT" \
-  "$HOME_PAGE" "$HEADERS" "$LOG_FILE"
+  "$HOME_PAGE" "$BRANCH_RESULT" "$HEADERS" "$LOG_FILE" "$STUB_LOG_FILE"
 
 NOP_PID=""
+STUB_PID=""
 
 show_log() {
   if [[ -f "$LOG_FILE" ]]; then
     echo "----- nopCommerce runtime log -----" >&2
     tail -n 250 "$LOG_FILE" >&2 || true
+    echo "-----------------------------------" >&2
+  fi
+  if [[ -f "$STUB_LOG_FILE" ]]; then
+    echo "----- Mercato runtime stub log ----" >&2
+    tail -n 100 "$STUB_LOG_FILE" >&2 || true
     echo "-----------------------------------" >&2
   fi
 }
@@ -71,8 +81,17 @@ stop_nop() {
   NOP_PID=""
 }
 
+stop_stub() {
+  if [[ -n "${STUB_PID:-}" ]] && kill -0 "$STUB_PID" 2>/dev/null; then
+    kill "$STUB_PID" 2>/dev/null || true
+    wait "$STUB_PID" 2>/dev/null || true
+  fi
+  STUB_PID=""
+}
+
 cleanup() {
   stop_nop
+  stop_stub
 }
 trap cleanup EXIT
 
@@ -85,6 +104,31 @@ start_nop() {
       dotnet run --project Nop.Web.csproj --configuration Release --no-build
   ) >"$LOG_FILE" 2>&1 &
   NOP_PID=$!
+}
+
+start_stub() {
+  : > "$STUB_LOG_FILE"
+  MERCATO_RUNTIME_BEARER_TOKEN="$CONFIG_BEARER_TOKEN" \
+  MERCATO_RUNTIME_DEFAULT_BRANCH_ID="$CONFIG_DEFAULT_BRANCH_ID" \
+  MERCATO_RUNTIME_SECOND_BRANCH_ID="$SECOND_BRANCH_ID" \
+    python3 "$SCRIPT_DIR/runtime-mercato-stub.py" >"$STUB_LOG_FILE" 2>&1 &
+  STUB_PID=$!
+
+  for _ in {1..30}; do
+    if ! kill -0 "$STUB_PID" 2>/dev/null; then
+      echo "Mercato runtime stub exited before becoming ready." >&2
+      show_log
+      return 1
+    fi
+    if curl -fsS --max-time 2 "$CONFIG_BASE_URL/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  echo "Timed out waiting for Mercato runtime stub." >&2
+  show_log
+  return 1
 }
 
 wait_for_url() {
@@ -140,6 +184,82 @@ with open(page, encoding="utf-8-sig") as stream:
 if parser.value is None:
     raise SystemExit(f"Unable to locate input {field_name!r} in {page}")
 print(parser.value)
+PY
+}
+
+extract_form_input_value() {
+  local page="$1"
+  local action_fragment="$2"
+  local field_name="$3"
+
+  python3 - "$page" "$action_fragment" "$field_name" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+page, action_fragment, field_name = sys.argv[1:4]
+
+class FormInputParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.in_target = False
+        self.value = None
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag.lower() == "form":
+            self.in_target = action_fragment in values.get("action", "")
+            return
+        if self.in_target and tag.lower() == "input" and values.get("name") == field_name and self.value is None:
+            self.value = values.get("value", "")
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "form":
+            self.in_target = False
+
+parser = FormInputParser()
+with open(page, encoding="utf-8-sig") as stream:
+    parser.feed(stream.read())
+
+if parser.value is None:
+    raise SystemExit(f"Unable to locate {field_name!r} in form containing action {action_fragment!r}")
+print(parser.value)
+PY
+}
+
+assert_selected_branch() {
+  local page="$1"
+  local expected_branch="$2"
+
+  python3 - "$page" "$expected_branch" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+page, expected = sys.argv[1:3]
+
+class BranchParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.in_selector = False
+        self.selected = None
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        tag = tag.lower()
+        if tag == "select" and values.get("id") == "mercato-branch":
+            self.in_selector = True
+        elif self.in_selector and tag == "option" and "selected" in values:
+            self.selected = values.get("value")
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "select":
+            self.in_selector = False
+
+parser = BranchParser()
+with open(page, encoding="utf-8-sig") as stream:
+    parser.feed(stream.read())
+
+if (parser.selected or "").lower() != expected.lower():
+    raise SystemExit(f"Expected selected Mercato branch {expected}, got {parser.selected}")
 PY
 }
 
@@ -281,6 +401,9 @@ if [[ "$CONFIG_AUTH_STATUS" != "200" ]] || ! grep -q 'Mercato connection' "$CONF
   exit 1
 fi
 
+# Make the deterministic Mercato API available before enabling persisted connector settings.
+start_stub
+
 # Persist settings through the real nopCommerce plugin UI and verify the redirected model reloads them.
 CONFIG_TOKEN="$(extract_input_value "$CONFIG_PAGE" "__RequestVerificationToken")"
 CONFIG_SAVE_STATUS="$(
@@ -306,14 +429,39 @@ assert_input_value "$CONFIG_PAGE" "BaseUrl" "$CONFIG_BASE_URL"
 assert_input_value "$CONFIG_PAGE" "BearerToken" "$CONFIG_BEARER_TOKEN"
 assert_input_value "$CONFIG_PAGE" "DefaultBranchId" "$CONFIG_DEFAULT_BRANCH_ID"
 
-# The configured-but-unreachable Mercato endpoint must not take the storefront down; BranchSelector fails closed.
-HOME_STATUS="$(curl -sS -L -D "$HEADERS" -o "$HOME_PAGE" -w '%{http_code}' --max-time 30 "$BASE_URL/")"
-HOME_EFFECTIVE_URL="$(curl -sS -L -o /dev/null -w '%{url_effective}' --max-time 30 "$BASE_URL/")"
+# The active BranchSelector widget must render live Mercato branches in the storefront header.
+HOME_STATUS="$(curl -sS -L -D "$HEADERS" -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o "$HOME_PAGE" -w '%{http_code}' --max-time 30 "$BASE_URL/")"
+HOME_EFFECTIVE_URL="$(curl -sS -L -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o /dev/null -w '%{url_effective}' --max-time 30 "$BASE_URL/")"
 if [[ "$HOME_STATUS" != "200" || "$HOME_EFFECTIVE_URL" == */install* ]]; then
   echo "nopCommerce did not reach an installed storefront. status=$HOME_STATUS effective_url=$HOME_EFFECTIVE_URL" >&2
   show_log
   exit 1
 fi
+
+grep -q 'class="mercato-branch-selector"' "$HOME_PAGE"
+grep -q 'Runtime Main Branch' "$HOME_PAGE"
+grep -q 'Runtime Second Branch' "$HOME_PAGE"
+
+# Submit the real antiforgery-protected selector form and prove the customer-scoped choice persists.
+BRANCH_TOKEN="$(extract_form_input_value "$HOME_PAGE" "/mercato/branch/select" "__RequestVerificationToken")"
+BRANCH_STATUS="$(
+  curl -sS --max-time 30 \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    -o "$BRANCH_RESULT" -w '%{http_code}' \
+    "$BASE_URL/mercato/branch/select" \
+    --data-urlencode "__RequestVerificationToken=$BRANCH_TOKEN" \
+    --data-urlencode "branchId=$SECOND_BRANCH_ID" \
+    --data-urlencode "returnUrl=/"
+)"
+if [[ ! "$BRANCH_STATUS" =~ ^(301|302|303|307|308)$ ]]; then
+  echo "Mercato branch selection did not redirect successfully (HTTP $BRANCH_STATUS)." >&2
+  cat "$BRANCH_RESULT" >&2 || true
+  show_log
+  exit 1
+fi
+
+curl -fsS -b "$COOKIE_JAR" -c "$COOKIE_JAR" "$BASE_URL/" -o "$HOME_PAGE"
+assert_selected_branch "$HOME_PAGE" "$SECOND_BRANCH_ID"
 
 if grep -Eiq 'Unhandled exception|ReflectionTypeLoadException|Could not load file or assembly' "$LOG_FILE"; then
   echo "nopCommerce runtime log contains a plugin/runtime loading failure." >&2
@@ -321,4 +469,4 @@ if grep -Eiq 'Unhandled exception|ReflectionTypeLoadException|Could not load fil
   exit 1
 fi
 
-echo "nopCommerce 4.90.7 runtime installation and Connector configuration smoke test passed."
+echo "nopCommerce 4.90.7 runtime installation, Connector settings, and branch selection smoke test passed."
