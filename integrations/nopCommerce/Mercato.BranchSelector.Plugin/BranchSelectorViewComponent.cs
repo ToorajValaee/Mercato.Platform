@@ -32,6 +32,7 @@ public sealed class BranchSelectorViewComponent : NopViewComponent
 
         var selected = await _selection.GetSelectedBranchAsync();
         var returnUrl = HttpContext.Request.PathBase + HttpContext.Request.Path + HttpContext.Request.QueryString;
+        var actionUrl = Url.RouteUrl(BranchSelectorDefaults.SelectBranchRouteName) ?? "/mercato/branch/select";
         var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
         var tokenField = string.IsNullOrWhiteSpace(tokens.RequestToken)
             ? string.Empty
@@ -43,7 +44,7 @@ public sealed class BranchSelectorViewComponent : NopViewComponent
             return $"<option value=\"{branch.Id:D}\"{isSelected}>{WebUtility.HtmlEncode(branch.Name)}</option>";
         }));
 
-        var html = $"<form method=\"post\" action=\"/mercato/branch/select\" class=\"mercato-branch-selector\">" +
+        var html = $"<form method=\"post\" action=\"{WebUtility.HtmlEncode(actionUrl)}\" class=\"mercato-branch-selector\">" +
                    tokenField +
                    $"<input type=\"hidden\" name=\"returnUrl\" value=\"{WebUtility.HtmlEncode(returnUrl)}\" />" +
                    "<label for=\"mercato-branch\">Branch</label>" +
