@@ -2,10 +2,11 @@
   "Group": "Mercato",
   "FriendlyName": "Mercato Inventory Sync",
   "SystemName": "Mercato.InventorySync",
-  "Version": "4.90.7.1",
+  "Version": "4.90.7.2",
   "SupportedVersions": [ "4.90" ],
   "Author": "Tooraj Valaee",
   "DisplayOrder": 3,
   "FileName": "Nop.Plugin.Mercato.InventorySync.dll",
-  "Description": "Publishes Mercato-authoritative inventory availability to nopCommerce."
+  "Description": "Publishes Mercato-authoritative inventory availability to nopCommerce.",
+  "DependsOnSystemNames": [ "Mercato.Connector" ]
 }
