@@ -16,20 +16,24 @@ public sealed class MercatoApiClient
 {
     private const string MissingBaseUrlMessage = "Mercato Base URL is not configured. Configure the Mercato Connector plugin or set Mercato:BaseUrl.";
     private readonly HttpClient _http;
+    private readonly string? _configurationError;
 
     public MercatoApiClient(HttpClient http, MercatoConnectorOptions options)
     {
         _http = http;
 
         var baseUrl = options.BaseUrl?.Trim();
-        if (!string.IsNullOrWhiteSpace(baseUrl))
+        if (string.IsNullOrWhiteSpace(baseUrl))
         {
-            if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri) ||
-                (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
-            {
-                throw new ArgumentException("Mercato Base URL must be an absolute HTTP or HTTPS URL.", nameof(options));
-            }
-
+            _configurationError = MissingBaseUrlMessage;
+        }
+        else if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri) ||
+                 (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+        {
+            _configurationError = "Mercato Base URL must be an absolute HTTP or HTTPS URL.";
+        }
+        else
+        {
             _http.BaseAddress = baseUri;
         }
 
@@ -37,7 +41,7 @@ public sealed class MercatoApiClient
             _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.BearerToken);
     }
 
-    public bool IsConfigured => _http.BaseAddress is not null;
+    public bool IsConfigured => _configurationError is null && _http.BaseAddress is not null;
 
     public async Task<bool> HealthAsync(CancellationToken cancellationToken = default)
     {
@@ -78,6 +82,6 @@ public sealed class MercatoApiClient
     private void EnsureConfigured()
     {
         if (!IsConfigured)
-            throw new InvalidOperationException(MissingBaseUrlMessage);
+            throw new InvalidOperationException(_configurationError ?? MissingBaseUrlMessage);
     }
 }
