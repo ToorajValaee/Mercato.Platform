@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 1.9
+Version: 2.0
 Purpose: Source of truth for product requirements, architecture, business rules, implementation status, known gaps, and continuation work.
 
 ## 1. Product boundary
@@ -91,43 +91,65 @@ This is not a policy-defined double-entry general ledger. Chart of accounts, jur
 
 ## 9. nopCommerce 4.90.7 integration
 
-Target release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**. All five plugin projects target `net9.0`, include nopCommerce `BasePlugin` adapters, and declare `SupportedVersions: ["4.90"]`.
+Target release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**.
 
-Implemented shared/core behavior:
-- `Mercato.NopCommerce.Core`: authenticated Mercato HTTP client, health, branch/catalog retrieval, and idempotent commerce-order synchronization;
-- `Mercato.Connector.Plugin`: connection/health core and concrete DI registration;
+The five concrete Mercato plugin projects now follow nopCommerce 4.90.7's native plugin conventions rather than only compiling against nopCommerce APIs:
+- target `net9.0`;
+- reference the exact 4.90.7 `Nop.Web.csproj` when `NopCommerceRoot` is supplied;
+- output directly to `Nop.Web/Plugins/Mercato.*`;
+- use `CopyLocalLockFileAssemblies=false`;
+- copy `plugin.json` and required views as plugin content;
+- invoke nopCommerce `Build/ClearPluginAssemblies.proj` after build;
+- register through `INopStartup`;
+- use `BasePlugin` plus `IMiscPlugin` for generic integration plugins and `IWidgetPlugin` for BranchSelector;
+- use nopCommerce dependency metadata, generic attributes, settings, routing, and widget conventions.
+
+Plugin responsibilities:
+- `Mercato.NopCommerce.Core`: shared Mercato HTTP client, contracts, mapping/configuration keys, and idempotent commerce-order synchronization;
+- `Mercato.Connector.Plugin`: shared Mercato API client registration, connection/health core, nopCommerce settings, and admin configuration page;
 - `Mercato.ProductSync.Plugin`: Mercato catalog → concrete nopCommerce product upsert;
 - `Mercato.InventorySync.Plugin`: branch-specific Mercato availability → concrete nopCommerce stock snapshot;
 - `Mercato.BranchSelector.Plugin`: storefront branch selector plus persisted customer branch selection;
 - `Mercato.OrderSync.Plugin`: nopCommerce `OrderPaidEvent` → Mercato checkout.
 
+Dependency rules:
+- ProductSync, InventorySync, BranchSelector, and OrderSync declare `DependsOnSystemNames: ["Mercato.Connector"]`;
+- Connector owns the shared `MercatoApiClient` and connector configuration;
+- dependent plugins consume that shared registration instead of creating competing API clients/configuration instances.
+
+Connector configuration:
+- primary configuration is stored through nopCommerce `ISettingService` on the Connector admin configuration page;
+- settings are Mercato API base URL, bearer token, and optional default branch ID;
+- host configuration keys `Mercato:BaseUrl`, `Mercato:BearerToken`, and `Mercato:DefaultBranchId` remain fallback sources when corresponding plugin settings are empty;
+- the default branch is used by scheduled inventory synchronization and as the paid-order branch fallback.
+
 Concrete adapter rules:
 - product sync uses Mercato SKU, or stable fallback `MERCATO-{ProductId:N}` when SKU is absent;
-- synchronized nop products carry `Mercato.ProductId=<guid>` in admin metadata for reverse mapping;
+- synchronized nop products store Mercato identity in nopCommerce generic attribute `Mercato.ProductId` rather than overwriting `Product.AdminComment`;
+- OrderSync still reads legacy `Mercato.ProductId=<guid>` admin-comment mappings as a migration fallback;
 - product name and price are overwritten from Mercato so Mercato remains product/pricing authority;
 - inventory sync writes nop `StockQuantity` from Mercato availability while Mercato remains stock authority;
 - selected branch is stored in nop customer generic attribute `Mercato.BranchId`;
-- branch selector renders in nopCommerce `HeaderSelectors`, loads branches from `GET /api/branches`, and persists the customer selection through the plugin endpoint;
-- paid-order sync resolves branch from order/customer attributes and then `Mercato:DefaultBranchId` fallback;
-- optional Mercato customer mapping uses `Mercato.CustomerId`; otherwise checkout is unlinked/guest;
-- paid-order lines map nop products back to Mercato GUIDs from synchronized metadata;
+- optional Mercato customer mapping uses `Mercato.CustomerId`;
+- BranchSelector implements nopCommerce `IWidgetPlugin`, renders in `PublicWidgetZones.HeaderSelectors`, and its component inherits `NopViewComponent` with the standard `(widgetZone, additionalData)` invocation signature;
+- the branch-selection endpoint is registered using nopCommerce `IRouteProvider` and retains antiforgery validation;
+- paid-order synchronization consumes `OrderPaidEvent`, resolves branch from order/customer attributes then Connector default branch, and maps order lines through generic product attributes;
 - order synchronization uses idempotency key `nop:{nopOrderId}`;
 - missing branch or unmapped products fail loudly and are logged in nopCommerce instead of creating incorrect Mercato transactions.
 
 Synchronization triggers:
 - ProductSync installs an enabled nopCommerce `IScheduleTask` named `Mercato product synchronization`, default period 900 seconds;
 - InventorySync installs an enabled nopCommerce `IScheduleTask` named `Mercato inventory synchronization`, default period 300 seconds;
-- scheduled inventory synchronization uses `Mercato:DefaultBranchId` as its branch snapshot source;
+- scheduled inventory synchronization uses Connector-managed default branch configuration;
 - plugin uninstall removes the corresponding schedule task.
 
-Concrete adapters register through nopCommerce `INopStartup`. Project files accept `NopCommerceRoot`; when supplied they reference the exact 4.90.7 `Nop.Web.csproj`. CI checks out official `release-4.90.7` source and compiles the adapters against it.
+Packaging and validation:
+- CI checks out official nopCommerce `release-4.90.7` and compiles the concrete plugins against it;
+- concrete builds run nopCommerce's own plugin-assembly cleanup target;
+- CI packages the cleaned native `Nop.Web/Plugins/Mercato.*` directories as artifact `mercato-nopcommerce-4.90.7-plugins` rather than reconstructing plugin folders manually;
+- a prior native-package run completed backend build/tests, all five concrete plugin builds, staging, and artifact upload successfully; newer nop-native configuration refinements must remain green before being considered validated.
 
-Configuration keys:
-- `Mercato:BaseUrl` — required;
-- `Mercato:BearerToken` — server-to-server bearer credential;
-- `Mercato:DefaultBranchId` — order-sync fallback and scheduled inventory-sync branch.
-
-Remaining nopCommerce work is deployed-environment verification and optional richer admin UX; the core storefront branch selection and automatic product/inventory synchronization triggers are implemented.
+Remaining nopCommerce work is deployed-environment end-to-end verification and optional richer synchronization/admin operations. The project-file, dependency, configuration, routing, widget, product-mapping, scheduled-sync, and paid-order adapter structures are implemented.
 
 ## 10. Database initialization
 
@@ -135,7 +157,7 @@ No EF migrations currently exist. Startup uses `MigrateAsync` when migrations ex
 
 ## 11. Resolved technical debt
 
-Resolved: checkout DTO/type shadowing, obsolete checkout workflow stub, no-op inventory repository, no-op UnitOfWork, placeholder branch/invoice/transfer/settlement APIs, invalid EF mappings, in-memory-only order/invoice persistence, client-trusted POS prices, invalid unattributed settlement creation, missing checkout retry protection, broken central NuGet package management, and the missing Infrastructure → Application project reference.
+Resolved: checkout DTO/type shadowing, obsolete checkout workflow stub, no-op inventory repository, no-op UnitOfWork, placeholder branch/invoice/transfer/settlement APIs, invalid EF mappings, in-memory-only order/invoice persistence, client-trusted POS prices, invalid unattributed settlement creation, missing checkout retry protection, broken central NuGet package management, missing Infrastructure → Application project reference, non-native nopCommerce plugin output/cleanup conventions, duplicated Mercato API-client registration across nop plugins, product identity stored in admin comments, ad-hoc branch endpoint routing, and non-standard widget invocation signature.
 
 ## 12. Development status
 
@@ -148,14 +170,16 @@ Implemented core platform development:
 - [x] Artist settlement aggregation/payment state/accounting event
 - [x] Accounting transaction/reporting API
 - [x] nopCommerce target locked to 4.90.7
-- [x] nopCommerce plugin metadata/BasePlugin adapters
-- [x] concrete product gateway
+- [x] nopCommerce-native plugin project output/cleanup conventions
+- [x] nopCommerce plugin dependency metadata and shared Connector ownership
+- [x] Connector nopCommerce settings and admin configuration page
+- [x] concrete product gateway with generic-attribute Mercato identity
 - [x] concrete inventory gateway
-- [x] storefront branch selector and customer branch-selection persistence
+- [x] storefront branch selector, nop-native widget signature/routing, and customer branch persistence
 - [x] paid-order event consumer and product reverse mapping
 - [x] automatic scheduled product synchronization
 - [x] automatic scheduled inventory synchronization
-- [x] CI configured to compile against official nopCommerce 4.90.7 source
+- [x] CI configured to compile/package against official nopCommerce 4.90.7 source
 
 Business/policy decisions intentionally unresolved:
 - [ ] final POS payment methods and method-specific fields
@@ -169,12 +193,13 @@ Business/policy decisions intentionally unresolved:
 Integration/deployment work still required:
 - [ ] run end-to-end paid nop order → Mercato transaction in a deployed environment
 - [ ] verify scheduled sync against a running nopCommerce instance
+- [ ] install/configure the packaged plugins in a running nopCommerce 4.90.7 instance and verify admin configuration view/runtime routing
 - [ ] Docker deployment verification
 - [ ] production-readiness/security review
 
 ## 13. Validation status
 
-Backend CI has reached successful restore, build, and tests. CI also checks out official nopCommerce `release-4.90.7` and compiles version-specific adapters. Integration changes must remain green against that exact source before a batch is considered complete.
+Backend CI has successful restore, Release build, and tests. A completed native-plugin packaging run also successfully built all five plugins against official nopCommerce 4.90.7, staged their cleaned nopCommerce plugin directories, and uploaded the plugin artifact. Subsequent nopCommerce-native settings/configuration changes are validated through the same exact-source CI pipeline; a change is not considered fully validated until that run is green.
 
 ## 14. Known policy decisions
 
