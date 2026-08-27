@@ -1,18 +1,21 @@
 using Mercato.NopCommerce.Core;
 using Nop.Core.Domain.Catalog;
 using Nop.Services.Catalog;
+using Nop.Services.Common;
 
 namespace Mercato.ProductSync.Plugin;
 
 public sealed class NopProductGateway : INopProductGateway
 {
-    public const string MercatoProductIdPrefix = "Mercato.ProductId=";
-
     private readonly IProductService _products;
+    private readonly IGenericAttributeService _attributes;
 
-    public NopProductGateway(IProductService products)
+    public NopProductGateway(
+        IProductService products,
+        IGenericAttributeService attributes)
     {
         _products = products;
+        _attributes = attributes;
     }
 
     public async Task UpsertAsync(CatalogProduct product, CancellationToken cancellationToken = default)
@@ -20,7 +23,6 @@ public sealed class NopProductGateway : INopProductGateway
         var sku = product.NopSku;
         var entity = await _products.GetProductBySkuAsync(sku);
         var now = DateTime.UtcNow;
-        var identity = $"{MercatoProductIdPrefix}{product.ProductId:D}";
 
         if (entity is null)
         {
@@ -30,7 +32,6 @@ public sealed class NopProductGateway : INopProductGateway
                 VisibleIndividually = true,
                 Name = product.Name,
                 Sku = sku,
-                AdminComment = identity,
                 Price = product.SalePrice,
                 ManageInventoryMethodId = (int)ManageInventoryMethod.ManageStock,
                 Published = true,
@@ -41,14 +42,15 @@ public sealed class NopProductGateway : INopProductGateway
             };
 
             await _products.InsertProductAsync(entity);
+            await _attributes.SaveAttributeAsync(entity, MercatoNopDefaults.ProductIdAttribute, product.ProductId.ToString("D"));
             return;
         }
 
         entity.Name = product.Name;
-        entity.AdminComment = identity;
         entity.Price = product.SalePrice;
         entity.Published = true;
         entity.UpdatedOnUtc = now;
         await _products.UpdateProductAsync(entity);
+        await _attributes.SaveAttributeAsync(entity, MercatoNopDefaults.ProductIdAttribute, product.ProductId.ToString("D"));
     }
 }
