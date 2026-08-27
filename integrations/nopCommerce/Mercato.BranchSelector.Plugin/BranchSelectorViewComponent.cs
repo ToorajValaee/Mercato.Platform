@@ -1,9 +1,11 @@
 using System.Net;
+using System.Text.Json;
 using Mercato.NopCommerce.Core;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewComponents;
+using Microsoft.Extensions.Logging;
 using Nop.Web.Framework.Components;
 
 namespace Mercato.BranchSelector.Plugin;
@@ -13,22 +15,48 @@ public sealed class BranchSelectorViewComponent : NopViewComponent
     private readonly MercatoApiClient _mercato;
     private readonly BranchSelectionService _selection;
     private readonly IAntiforgery _antiforgery;
+    private readonly ILogger<BranchSelectorViewComponent> _logger;
 
     public BranchSelectorViewComponent(
         MercatoApiClient mercato,
         BranchSelectionService selection,
-        IAntiforgery antiforgery)
+        IAntiforgery antiforgery,
+        ILogger<BranchSelectorViewComponent> logger)
     {
         _mercato = mercato;
         _selection = selection;
         _antiforgery = antiforgery;
+        _logger = logger;
     }
 
     public async Task<IViewComponentResult> InvokeAsync(string widgetZone, object additionalData)
     {
-        var branches = await _mercato.GetBranchesAsync();
+        if (!_mercato.IsConfigured)
+            return Empty();
+
+        IReadOnlyList<MercatoBranch> branches;
+        try
+        {
+            branches = await _mercato.GetBranchesAsync(HttpContext.RequestAborted);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Mercato branch selector could not load branches; the selector will not render for this request.");
+            return Empty();
+        }
+        catch (OperationCanceledException ex) when (!HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Mercato branch selector timed out while loading branches; the selector will not render for this request.");
+            return Empty();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Mercato branch selector received an invalid branch response; the selector will not render for this request.");
+            return Empty();
+        }
+
         if (branches.Count == 0)
-            return new HtmlContentViewComponentResult(HtmlString.Empty);
+            return Empty();
 
         var selected = await _selection.GetSelectedBranchAsync();
         var returnUrl = HttpContext.Request.PathBase + HttpContext.Request.Path + HttpContext.Request.QueryString;
@@ -53,4 +81,7 @@ public sealed class BranchSelectorViewComponent : NopViewComponent
 
         return new HtmlContentViewComponentResult(new HtmlString(html));
     }
+
+    private static IViewComponentResult Empty()
+        => new HtmlContentViewComponentResult(HtmlString.Empty);
 }
