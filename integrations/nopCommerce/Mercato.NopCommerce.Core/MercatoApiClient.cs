@@ -14,30 +14,53 @@ public sealed record CommerceOrder(string ExternalOrderId, Guid BranchId, Guid C
 
 public sealed class MercatoApiClient
 {
+    private const string MissingBaseUrlMessage = "Mercato Base URL is not configured. Configure the Mercato Connector plugin or set Mercato:BaseUrl.";
     private readonly HttpClient _http;
 
     public MercatoApiClient(HttpClient http, MercatoConnectorOptions options)
     {
         _http = http;
-        _http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+
+        var baseUrl = options.BaseUrl?.Trim();
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri) ||
+                (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new ArgumentException("Mercato Base URL must be an absolute HTTP or HTTPS URL.", nameof(options));
+            }
+
+            _http.BaseAddress = baseUri;
+        }
+
         if (!string.IsNullOrWhiteSpace(options.BearerToken))
             _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.BearerToken);
     }
 
+    public bool IsConfigured => _http.BaseAddress is not null;
+
     public async Task<bool> HealthAsync(CancellationToken cancellationToken = default)
-        => (await _http.GetAsync("health", cancellationToken)).IsSuccessStatusCode;
+    {
+        EnsureConfigured();
+        return (await _http.GetAsync("health", cancellationToken)).IsSuccessStatusCode;
+    }
 
     public async Task<IReadOnlyList<MercatoBranch>> GetBranchesAsync(CancellationToken cancellationToken = default)
-        => await _http.GetFromJsonAsync<List<MercatoBranch>>("api/branches", cancellationToken) ?? [];
+    {
+        EnsureConfigured();
+        return await _http.GetFromJsonAsync<List<MercatoBranch>>("api/branches", cancellationToken) ?? [];
+    }
 
     public async Task<IReadOnlyList<CatalogProduct>> GetCatalogAsync(Guid? branchId = null, CancellationToken cancellationToken = default)
     {
+        EnsureConfigured();
         var url = branchId is Guid id && id != Guid.Empty ? $"api/catalog?branchId={id}" : "api/catalog";
         return await _http.GetFromJsonAsync<List<CatalogProduct>>(url, cancellationToken) ?? [];
     }
 
     public async Task<JsonElement> SyncOrderAsync(CommerceOrder order, CancellationToken cancellationToken = default)
     {
+        EnsureConfigured();
         var externalOrderId = order.ExternalOrderId.Trim();
         var request = new
         {
@@ -50,5 +73,11 @@ public sealed class MercatoApiClient
         using var response = await _http.PostAsJsonAsync("api/pos/checkout", request, cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+    }
+
+    private void EnsureConfigured()
+    {
+        if (!IsConfigured)
+            throw new InvalidOperationException(MissingBaseUrlMessage);
     }
 }
