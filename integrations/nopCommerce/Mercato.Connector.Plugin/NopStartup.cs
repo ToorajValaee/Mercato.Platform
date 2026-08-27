@@ -17,9 +17,6 @@ public sealed class NopStartup : INopStartup
         services.TryAddScoped(sp =>
         {
             var configurationProvider = sp.GetRequiredService<IMercatoConfiguration>();
-            if (string.IsNullOrWhiteSpace(configurationProvider.BaseUrl))
-                throw new InvalidOperationException("Mercato Base URL is not configured. Configure the Mercato Connector plugin or set Mercato:BaseUrl.");
-
             var options = new MercatoConnectorOptions(
                 configurationProvider.BaseUrl,
                 configurationProvider.BearerToken);
