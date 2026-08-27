@@ -4,10 +4,11 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewComponents;
+using Nop.Web.Framework.Components;
 
 namespace Mercato.BranchSelector.Plugin;
 
-public sealed class BranchSelectorViewComponent : ViewComponent
+public sealed class BranchSelectorViewComponent : NopViewComponent
 {
     private readonly MercatoApiClient _mercato;
     private readonly BranchSelectionService _selection;
@@ -23,11 +24,11 @@ public sealed class BranchSelectorViewComponent : ViewComponent
         _antiforgery = antiforgery;
     }
 
-    public async Task<IViewComponentResult> InvokeAsync()
+    public async Task<IViewComponentResult> InvokeAsync(string widgetZone, object additionalData)
     {
         var branches = await _mercato.GetBranchesAsync();
         if (branches.Count == 0)
-            return Content(string.Empty);
+            return new HtmlContentViewComponentResult(HtmlString.Empty);
 
         var selected = await _selection.GetSelectedBranchAsync();
         var returnUrl = HttpContext.Request.PathBase + HttpContext.Request.Path + HttpContext.Request.QueryString;
