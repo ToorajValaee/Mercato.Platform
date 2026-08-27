@@ -2,10 +2,11 @@
   "Group": "Mercato",
   "FriendlyName": "Mercato Branch Selector",
   "SystemName": "Mercato.BranchSelector",
-  "Version": "4.90.7.1",
+  "Version": "4.90.7.2",
   "SupportedVersions": [ "4.90" ],
   "Author": "Tooraj Valaee",
   "DisplayOrder": 4,
   "FileName": "Nop.Plugin.Mercato.BranchSelector.dll",
-  "Description": "Maintains customer branch context for branch-specific Mercato availability."
+  "Description": "Maintains customer branch context for branch-specific Mercato availability.",
+  "DependsOnSystemNames": [ "Mercato.Connector" ]
 }
