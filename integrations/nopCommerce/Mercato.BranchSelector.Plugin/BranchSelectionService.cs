@@ -6,8 +6,6 @@ namespace Mercato.BranchSelector.Plugin;
 
 public sealed class BranchSelectionService
 {
-    public const string BranchAttribute = "Mercato.BranchId";
-
     private readonly IWorkContext _workContext;
     private readonly IGenericAttributeService _attributes;
     private readonly MercatoApiClient _mercato;
@@ -25,7 +23,7 @@ public sealed class BranchSelectionService
     public async Task<Guid?> GetSelectedBranchAsync(CancellationToken cancellationToken = default)
     {
         var customer = await _workContext.GetCurrentCustomerAsync();
-        var value = await _attributes.GetAttributeAsync<string>(customer, BranchAttribute);
+        var value = await _attributes.GetAttributeAsync<string>(customer, MercatoNopDefaults.BranchIdAttribute);
         return Guid.TryParse(value, out var branchId) && branchId != Guid.Empty ? branchId : null;
     }
 
@@ -39,6 +37,6 @@ public sealed class BranchSelectionService
             throw new ArgumentException("The selected Mercato branch does not exist.", nameof(branchId));
 
         var customer = await _workContext.GetCurrentCustomerAsync();
-        await _attributes.SaveAttributeAsync(customer, BranchAttribute, branchId.ToString("D"));
+        await _attributes.SaveAttributeAsync(customer, MercatoNopDefaults.BranchIdAttribute, branchId.ToString("D"));
     }
 }
