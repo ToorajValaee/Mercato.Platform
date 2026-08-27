@@ -13,10 +13,18 @@
 
   <ItemGroup>
     <None Remove="plugin.json" />
+    <None Remove="Views/Configure.cshtml" />
+    <None Remove="Views/_ViewImports.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="plugin.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Views/Configure.cshtml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Views/_ViewImports.cshtml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
@@ -30,6 +38,10 @@
   <ItemGroup Condition="'$(NopCommerceRoot)' == ''">
     <Compile Remove="NopPlugin.cs" />
     <Compile Remove="NopStartup.cs" />
+    <Compile Remove="MercatoConnectorSettings.cs" />
+    <Compile Remove="NopMercatoConfiguration.cs" />
+    <Compile Remove="MercatoConnectorConfigurationModel.cs" />
+    <Compile Remove="MercatoConnectorController.cs" />
   </ItemGroup>
 
   <Target Name="NopTarget" AfterTargets="Build" Condition="'$(NopCommerceRoot)' != ''">
