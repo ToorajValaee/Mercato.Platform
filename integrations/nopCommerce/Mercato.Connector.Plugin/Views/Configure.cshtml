@@ -1,0 +1,59 @@
+@model Mercato.Connector.Plugin.MercatoConnectorConfigurationModel
+@{
+    Layout = "_ConfigurePlugin";
+}
+
+<form asp-controller="MercatoConnector" asp-action="Configure" method="post">
+    <div class="cards-group">
+        <div class="card card-default">
+            <div class="card-header">
+                Mercato connection
+            </div>
+            <div class="card-body">
+                @if (TempData["MercatoConnectorSettingsSaved"] is true)
+                {
+                    <div class="alert alert-success">Mercato connector settings were saved.</div>
+                }
+
+                <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <label asp-for="BaseUrl">Mercato API base URL</label>
+                    </div>
+                    <div class="col-md-9">
+                        <input asp-for="BaseUrl" class="form-control" placeholder="https://mercato.example.com/" />
+                        <span asp-validation-for="BaseUrl" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <label asp-for="BearerToken">Bearer token</label>
+                    </div>
+                    <div class="col-md-9">
+                        <input asp-for="BearerToken" type="password" class="form-control" autocomplete="new-password" />
+                        <small class="form-text text-muted">Optional when the Mercato API endpoint does not require a bearer token.</small>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-3">
+                        <label asp-for="DefaultBranchId">Default Mercato branch ID</label>
+                    </div>
+                    <div class="col-md-9">
+                        <input asp-for="DefaultBranchId" class="form-control" placeholder="00000000-0000-0000-0000-000000000000" />
+                        <span asp-validation-for="DefaultBranchId" class="text-danger"></span>
+                        <small class="form-text text-muted">Used by scheduled inventory synchronization and as the fallback for paid orders without a selected branch.</small>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <div class="col-md-9 offset-md-3">
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
