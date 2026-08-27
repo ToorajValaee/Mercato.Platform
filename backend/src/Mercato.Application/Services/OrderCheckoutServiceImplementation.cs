@@ -63,6 +63,29 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         if (request.Items.Count == 0)
             throw new InvalidOperationException("Checkout requires items.");
 
+        if (request.Items.Any(item => item.ProductId == Guid.Empty || item.Quantity <= 0))
+            throw new InvalidOperationException("Checkout contains an invalid item.");
+
+        // Normalize duplicate cart lines before any stock validation. POS clients and commerce
+        // adapters may legitimately send the same product more than once; validating each raw
+        // line independently could allow the combined quantity to exceed branch availability.
+        IReadOnlyList<CheckoutItem> normalizedItems;
+        try
+        {
+            normalizedItems = request.Items
+                .GroupBy(item => item.ProductId)
+                .Select(group => new CheckoutItem
+                {
+                    ProductId = group.Key,
+                    Quantity = group.Sum(item => item.Quantity)
+                })
+                .ToList();
+        }
+        catch (OverflowException exception)
+        {
+            throw new InvalidOperationException("Checkout product quantity is too large.", exception);
+        }
+
         if (request.CustomerId != Guid.Empty && !await _customers.ExistsAsync(request.CustomerId, cancellationToken))
             throw new InvalidOperationException("Checkout customer was not found.");
 
@@ -79,15 +102,12 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     if (existingInsideTransaction is not null)
                         return DeserializeResult(existingInsideTransaction);
 
-                    var orderItems = new List<OrderItem>(request.Items.Count);
-                    var receiptLines = new List<ReceiptLine>(request.Items.Count);
+                    var orderItems = new List<OrderItem>(normalizedItems.Count);
+                    var receiptLines = new List<ReceiptLine>(normalizedItems.Count);
                     var settlementSales = new List<(Guid ArtistId, Guid ProductId, int Quantity, decimal PurchaseUnitPrice)>();
 
-                    foreach (var item in request.Items)
+                    foreach (var item in normalizedItems)
                     {
-                        if (item.ProductId == Guid.Empty || item.Quantity <= 0)
-                            throw new InvalidOperationException("Checkout contains an invalid item.");
-
                         var product = await _products.GetByIdAsync(item.ProductId, transactionCancellationToken)
                             ?? throw new InvalidOperationException($"Product {item.ProductId} was not found.");
 
