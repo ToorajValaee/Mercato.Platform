@@ -16,8 +16,9 @@ public sealed class NopStartup : INopStartup
         services.TryAddScoped(sp =>
         {
             var options = new MercatoConnectorOptions(
-                configuration["Mercato:BaseUrl"] ?? throw new InvalidOperationException("Mercato:BaseUrl is required."),
-                configuration["Mercato:BearerToken"] ?? string.Empty);
+                configuration[MercatoNopDefaults.BaseUrlConfigurationKey]
+                    ?? throw new InvalidOperationException($"{MercatoNopDefaults.BaseUrlConfigurationKey} is required."),
+                configuration[MercatoNopDefaults.BearerTokenConfigurationKey] ?? string.Empty);
             var factory = sp.GetRequiredService<IHttpClientFactory>();
             return new MercatoApiClient(factory.CreateClient("Mercato.Connector"), options);
         });
