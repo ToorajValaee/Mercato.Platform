@@ -47,6 +47,21 @@ public sealed class ReturnServiceImplementation : IReturnService
             throw new InvalidOperationException("Return requires a refund method.");
         if (request.Items.Count == 0)
             throw new InvalidOperationException("Return requires items.");
+        if (request.Items.Any(item => item.ProductId == Guid.Empty || item.Quantity <= 0))
+            throw new InvalidOperationException("Return contains an invalid item.");
+
+        IReadOnlyList<ReturnItem> normalizedItems;
+        try
+        {
+            normalizedItems = request.Items
+                .GroupBy(item => item.ProductId)
+                .Select(group => new ReturnItem(group.Key, group.Sum(item => item.Quantity)))
+                .ToList();
+        }
+        catch (OverflowException exception)
+        {
+            throw new InvalidOperationException("Return product quantity is too large.", exception);
+        }
 
         return _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
@@ -55,14 +70,11 @@ public sealed class ReturnServiceImplementation : IReturnService
             var invoice = await _invoices.GetByOrderIdAsync(order.Id, ct)
                 ?? throw new InvalidOperationException("Order invoice was not found.");
 
-            var returnLines = new List<SalesReturnLine>();
+            var returnLines = new List<SalesReturnLine>(normalizedItems.Count);
             var settlementReversals = new List<(Guid ArtistId, Guid ProductId, int Quantity, decimal PurchasePrice)>();
 
-            foreach (var requested in request.Items)
+            foreach (var requested in normalizedItems)
             {
-                if (requested.ProductId == Guid.Empty || requested.Quantity <= 0)
-                    throw new InvalidOperationException("Return contains an invalid item.");
-
                 var sold = order.Items.Where(x => x.ProductId == requested.ProductId).Sum(x => x.Quantity);
                 if (sold == 0)
                     throw new InvalidOperationException($"Product {requested.ProductId} was not sold on this order.");
