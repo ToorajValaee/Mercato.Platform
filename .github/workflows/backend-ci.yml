@@ -85,6 +85,10 @@ jobs:
           NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
         run: bash integrations/nopCommerce/runtime-smoke.sh
 
+      - name: Diagnose nopCommerce runtime failure
+        if: failure()
+        run: bash integrations/nopCommerce/runtime-diagnostics.sh
+
       - name: Stage nopCommerce plugin packages
         run: |
           set -euo pipefail
