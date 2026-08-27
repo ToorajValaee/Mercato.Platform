@@ -107,7 +107,7 @@ import html
 import re
 import sys
 
-text = open(sys.argv[1], encoding="utf-8").read()
+text = open(sys.argv[1], encoding="utf-8-sig").read()
 patterns = [
     r'<input[^>]*name="__RequestVerificationToken"[^>]*value="([^"]+)"',
     r'<input[^>]*value="([^"]+)"[^>]*name="__RequestVerificationToken"',
@@ -128,7 +128,7 @@ import sys
 
 path = sys.argv[1]
 expected = set(sys.argv[2:])
-with open(path, encoding="utf-8") as stream:
+with open(path, encoding="utf-8-sig") as stream:
     data = json.load(stream)
 
 installed = {
