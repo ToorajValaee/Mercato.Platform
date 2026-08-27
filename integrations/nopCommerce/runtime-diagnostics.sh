@@ -30,8 +30,9 @@ if [[ -z "$PG_CONTAINER" ]]; then
   exit 0
 fi
 
+# psql variable substitution is reliable when the SQL is read from stdin (rather than -c).
 echo "----- nopCommerce installer admin roles -----"
-docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 -v admin_email="$ADMIN_EMAIL" -P pager=off -c '
+docker exec -i "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 -v admin_email="$ADMIN_EMAIL" -P pager=off <<'SQL'
 SELECT c."Id" AS customer_id,
        c."Email" AS email,
        c."Active" AS active,
@@ -43,11 +44,12 @@ SELECT c."Id" AS customer_id,
 FROM "Customer" c
 LEFT JOIN "Customer_CustomerRole_Mapping" m ON m."Customer_Id" = c."Id"
 LEFT JOIN "CustomerRole" cr ON cr."Id" = m."CustomerRole_Id"
-WHERE lower(c."Email") = lower(:'"'"'admin_email'"'"')
-ORDER BY cr."Id";'
+WHERE lower(c."Email") = lower(:'admin_email')
+ORDER BY cr."Id";
+SQL
 
 echo "----- relevant nopCommerce permission mappings -----"
-docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 -P pager=off -c '
+docker exec -i "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 -P pager=off <<'SQL'
 SELECT pr."Id" AS permission_id,
        pr."SystemName" AS permission_system_name,
        cr."Id" AS role_id,
@@ -56,20 +58,22 @@ FROM "PermissionRecord" pr
 LEFT JOIN "PermissionRecord_Role_Mapping" m ON m."PermissionRecord_Id" = pr."Id"
 LEFT JOIN "CustomerRole" cr ON cr."Id" = m."CustomerRole_Id"
 WHERE pr."SystemName" IN (
-  '"'"'AccessAdminPanel'"'"',
-  '"'"'Security.AccessAdminPanel'"'"',
-  '"'"'ManagePlugins'"'"',
-  '"'"'Configuration.ManagePlugins'"'"',
-  '"'"'ManageScheduleTasks'"'"',
-  '"'"'System.ManageScheduleTasks'"'"',
-  '"'"'Catalog.ProductsView'"'"',
-  '"'"'Catalog.ProductsCreateEditDelete'"'"'
+  'AccessAdminPanel',
+  'Security.AccessAdminPanel',
+  'ManagePlugins',
+  'Configuration.ManagePlugins',
+  'ManageScheduleTasks',
+  'System.ManageScheduleTasks',
+  'Catalog.ProductsView',
+  'Catalog.ProductsCreateEditDelete'
 )
-ORDER BY pr."SystemName", cr."Id";'
+ORDER BY pr."SystemName", cr."Id";
+SQL
 
 echo "----- recent nopCommerce migration versions -----"
-docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 -P pager=off -c '
+docker exec -i "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 -P pager=off <<'SQL'
 SELECT "Version", "Description"
 FROM "MigrationVersionInfo"
 ORDER BY "Version" DESC
-LIMIT 12;'
+LIMIT 12;
+SQL
