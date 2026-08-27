@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nop.Core.Infrastructure;
+using Nop.Web.Framework.Infrastructure.Extensions;
 
 namespace Mercato.Connector.Plugin;
 
@@ -11,7 +12,7 @@ public sealed class NopStartup : INopStartup
 {
     public void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddHttpClient("Mercato.Connector");
+        services.AddHttpClient("Mercato.Connector").WithProxy();
         services.TryAddScoped(sp =>
         {
             var options = new MercatoConnectorOptions(
@@ -23,7 +24,9 @@ public sealed class NopStartup : INopStartup
         services.AddScoped<ConnectorPluginCore>();
     }
 
-    public void Configure(IApplicationBuilder application) { }
+    public void Configure(IApplicationBuilder application)
+    {
+    }
 
-    public int Order => 2990;
+    public int Order => 1;
 }
