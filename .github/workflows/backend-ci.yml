@@ -12,6 +12,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    services:
+      nop-postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: nopcommerce
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nopcommerce"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout Mercato
         uses: actions/checkout@v4
@@ -55,6 +70,12 @@ jobs:
           dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
           dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
           dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+
+      - name: Run nopCommerce runtime installation smoke test
+        env:
+          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+          NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
+        run: bash integrations/nopCommerce/runtime-smoke.sh
 
       - name: Stage nopCommerce plugin packages
         run: |
