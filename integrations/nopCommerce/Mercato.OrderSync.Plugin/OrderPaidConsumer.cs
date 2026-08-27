@@ -13,9 +13,7 @@ namespace Mercato.OrderSync.Plugin;
 
 public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
 {
-    public const string BranchAttribute = "Mercato.BranchId";
-    public const string CustomerAttribute = "Mercato.CustomerId";
-    private const string ProductIdPrefix = "Mercato.ProductId=";
+    private const string LegacyProductIdPrefix = "Mercato.ProductId=";
 
     private readonly OrderSyncCore _sync;
     private readonly IOrderService _orders;
@@ -49,19 +47,19 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
 
         try
         {
-            var branchText = await _attributes.GetAttributeAsync<string>(order, BranchAttribute, order.StoreId);
+            var branchText = await _attributes.GetAttributeAsync<string>(order, MercatoNopDefaults.BranchIdAttribute, order.StoreId);
             var customer = await _customers.GetCustomerByIdAsync(order.CustomerId);
             if (string.IsNullOrWhiteSpace(branchText) && customer is not null)
-                branchText = await _attributes.GetAttributeAsync<string>(customer, BranchAttribute, order.StoreId);
+                branchText = await _attributes.GetAttributeAsync<string>(customer, MercatoNopDefaults.BranchIdAttribute, order.StoreId);
             if (string.IsNullOrWhiteSpace(branchText))
-                branchText = _configuration["Mercato:DefaultBranchId"];
+                branchText = _configuration[MercatoNopDefaults.DefaultBranchIdConfigurationKey];
 
             if (!Guid.TryParse(branchText, out var branchId) || branchId == Guid.Empty)
                 throw new InvalidOperationException($"nopCommerce order {order.Id} has no valid Mercato branch mapping.");
 
-            var customerText = await _attributes.GetAttributeAsync<string>(order, CustomerAttribute, order.StoreId);
+            var customerText = await _attributes.GetAttributeAsync<string>(order, MercatoNopDefaults.CustomerIdAttribute, order.StoreId);
             if (string.IsNullOrWhiteSpace(customerText) && customer is not null)
-                customerText = await _attributes.GetAttributeAsync<string>(customer, CustomerAttribute, order.StoreId);
+                customerText = await _attributes.GetAttributeAsync<string>(customer, MercatoNopDefaults.CustomerIdAttribute, order.StoreId);
             Guid.TryParse(customerText, out var customerId);
 
             var items = new List<CommerceOrderItem>();
@@ -70,8 +68,12 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
                 var product = await _products.GetProductByIdAsync(orderItem.ProductId)
                     ?? throw new InvalidOperationException($"nopCommerce product {orderItem.ProductId} was not found.");
 
-                if (!TryReadMercatoProductId(product.AdminComment, out var mercatoProductId))
-                    throw new InvalidOperationException($"nopCommerce product {product.Id} is not mapped to a Mercato product.");
+                var productText = await _attributes.GetAttributeAsync<string>(product, MercatoNopDefaults.ProductIdAttribute);
+                if (!Guid.TryParse(productText, out var mercatoProductId) || mercatoProductId == Guid.Empty)
+                {
+                    if (!TryReadLegacyMercatoProductId(product.AdminComment, out mercatoProductId))
+                        throw new InvalidOperationException($"nopCommerce product {product.Id} is not mapped to a Mercato product.");
+                }
 
                 items.Add(new CommerceOrderItem(mercatoProductId, orderItem.Quantity));
             }
@@ -97,17 +99,17 @@ public sealed class OrderPaidConsumer : IConsumer<OrderPaidEvent>
         }
     }
 
-    private static bool TryReadMercatoProductId(string? adminComment, out Guid productId)
+    private static bool TryReadLegacyMercatoProductId(string? adminComment, out Guid productId)
     {
         productId = Guid.Empty;
         if (string.IsNullOrWhiteSpace(adminComment))
             return false;
 
-        var marker = adminComment.IndexOf(ProductIdPrefix, StringComparison.OrdinalIgnoreCase);
+        var marker = adminComment.IndexOf(LegacyProductIdPrefix, StringComparison.OrdinalIgnoreCase);
         if (marker < 0)
             return false;
 
-        var value = adminComment[(marker + ProductIdPrefix.Length)..].Split(new[] { '\r', '\n', ';' }, 2)[0].Trim();
+        var value = adminComment[(marker + LegacyProductIdPrefix.Length)..].Split(new[] { '\r', '\n', ';' }, 2)[0].Trim();
         return Guid.TryParse(value, out productId) && productId != Guid.Empty;
     }
 }
