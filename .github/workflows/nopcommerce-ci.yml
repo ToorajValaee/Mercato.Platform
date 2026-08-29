@@ -1,0 +1,98 @@
+name: nopCommerce 4.90.7 Regression
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: nopcommerce-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nopcommerce:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: nopcommerce
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nopcommerce"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout Mercato
+        uses: actions/checkout@v4
+
+      - name: Checkout nopCommerce 4.90.7
+        uses: actions/checkout@v4
+        with:
+          repository: nopSolutions/nopCommerce
+          ref: release-4.90.7
+          path: _nopCommerce
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build nopCommerce integration cores
+        run: |
+          dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release
+          dotnet build integrations/nopCommerce/Mercato.ProductSync.Plugin/Mercato.ProductSync.Plugin.csproj --configuration Release
+          dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release
+          dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release
+          dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release
+
+      - name: Build nopCommerce 4.90.7 plugins
+        run: |
+          NOP_ROOT="${GITHUB_WORKSPACE}/_nopCommerce"
+          dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.ProductSync.Plugin/Mercato.ProductSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+          dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
+
+      - name: Run nopCommerce installation smoke test
+        id: nop_install_runtime
+        env:
+          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+          NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
+        run: bash integrations/nopCommerce/runtime-install-smoke.sh
+
+      - name: Run nopCommerce Connector and branch storefront smoke test
+        id: nop_storefront_runtime
+        env:
+          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+        run: bash integrations/nopCommerce/runtime-config-smoke.sh
+
+      - name: Diagnose nopCommerce runtime failure
+        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure')
+        run: bash integrations/nopCommerce/runtime-diagnostics.sh
+
+      - name: Stage nopCommerce plugin packages
+        run: |
+          set -euo pipefail
+          rm -rf dist/nopCommerce-4.90.7
+          mkdir -p dist/nopCommerce-4.90.7
+          for plugin in Connector ProductSync InventorySync BranchSelector OrderSync; do
+            source="_nopCommerce/src/Presentation/Nop.Web/Plugins/Mercato.${plugin}"
+            target="dist/nopCommerce-4.90.7/Mercato.${plugin}"
+            test -f "$source/plugin.json"
+            test -f "$source/Nop.Plugin.Mercato.${plugin}.dll"
+            mkdir -p "$target"
+            cp -a "$source/." "$target/"
+          done
+
+      - name: Upload nopCommerce plugin packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: mercato-nopcommerce-4.90.7-plugins
+          path: dist/nopCommerce-4.90.7
+          if-no-files-found: error
