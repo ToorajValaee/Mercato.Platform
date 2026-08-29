@@ -51,7 +51,8 @@ public sealed class BranchTransferServiceImplementation : IBranchTransferService
                 request.ProductId,
                 request.SourceBranchId,
                 request.DestinationBranchId,
-                request.Quantity);
+                request.Quantity,
+                ct);
 
             var transfer = await _transfers.AddAsync(new BranchTransfer
             {
