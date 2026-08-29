@@ -8,6 +8,6 @@ public interface ISalesReturnRepository
     Task<int> GetReturnedQuantityAsync(
         Guid orderId,
         Guid productId,
-        bool serialize = false,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool serialize = false);
 }
