@@ -30,4 +30,12 @@ public sealed class OrderServiceImplementation : IOrderService
 
         return await _orders.AddAsync(order, cancellationToken);
     }
+
+    public Task<Order?> GetAsync(Guid orderId, CancellationToken cancellationToken = default)
+    {
+        if (orderId == Guid.Empty)
+            return Task.FromResult<Order?>(null);
+
+        return _orders.GetAsync(orderId, cancellationToken);
+    }
 }
