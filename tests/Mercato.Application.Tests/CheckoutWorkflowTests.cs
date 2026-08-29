@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Mercato.Application.DTOs;
@@ -136,9 +137,9 @@ public class CheckoutWorkflowTests
                 order.BranchId == branchId &&
                 order.TotalAmount == 75m &&
                 order.Items.Count == 1 &&
-                order.Items[0].ProductId == productId &&
-                order.Items[0].Quantity == 3 &&
-                order.Items[0].UnitPrice == salePrice),
+                order.Items.Single().ProductId == productId &&
+                order.Items.Single().Quantity == 3 &&
+                order.Items.Single().UnitPrice == salePrice),
             It.IsAny<CancellationToken>()), Times.Once);
         inventory.Verify(service => service.AdjustStockAsync(
             productId, branchId, -3, It.Is<string>(reason => reason.Contains(orderId.ToString())), It.IsAny<CancellationToken>()), Times.Once);
