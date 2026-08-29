@@ -90,14 +90,20 @@ jobs:
           dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
 
       - name: Run nopCommerce installation smoke test
-        id: nop_runtime
+        id: nop_install_runtime
         env:
           NOP_ROOT: ${{ github.workspace }}/_nopCommerce
           NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
         run: bash integrations/nopCommerce/runtime-install-smoke.sh
 
+      - name: Run nopCommerce Connector and branch storefront smoke test
+        id: nop_storefront_runtime
+        env:
+          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+        run: bash integrations/nopCommerce/runtime-config-smoke.sh
+
       - name: Diagnose nopCommerce runtime failure
-        if: failure() && steps.nop_runtime.outcome == 'failure'
+        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure')
         run: bash integrations/nopCommerce/runtime-diagnostics.sh
 
       - name: Stage nopCommerce plugin packages
