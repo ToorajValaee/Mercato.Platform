@@ -12,36 +12,18 @@ public sealed class PosController : ControllerBase
 {
     private readonly IOrderCheckoutService _checkout;
     private readonly IReturnService _returns;
-    private readonly IOrderService _orders;
 
-    public PosController(IOrderCheckoutService checkout, IReturnService returns, IOrderService orders)
+    public PosController(IOrderCheckoutService checkout, IReturnService returns)
     {
         _checkout = checkout;
         _returns = returns;
-        _orders = orders;
     }
 
     [HttpGet("orders/{orderId:guid}")]
     public async Task<IActionResult> GetOrder(Guid orderId, CancellationToken cancellationToken)
     {
-        var order = await _orders.GetAsync(orderId, cancellationToken);
-        if (order is null)
-            return NotFound();
-
-        return Ok(new
-        {
-            order.Id,
-            order.BranchId,
-            order.CreatedAtUtc,
-            order.TotalAmount,
-            Items = order.Items.Select(item => new
-            {
-                item.ProductId,
-                item.Quantity,
-                item.UnitPrice,
-                LineTotal = item.Quantity * item.UnitPrice
-            })
-        });
+        var order = await _returns.GetReturnableOrderAsync(orderId, cancellationToken);
+        return order is null ? NotFound() : Ok(order);
     }
 
     [HttpPost("checkout")]
