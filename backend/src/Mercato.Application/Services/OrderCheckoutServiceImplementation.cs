@@ -12,6 +12,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
     private readonly IInvoiceService _invoices;
     private readonly IInventoryService _inventory;
     private readonly IProductRepository _products;
+    private readonly IBranchRepository _branches;
     private readonly ICustomerRepository _customers;
     private readonly ISettlementService _settlements;
     private readonly IPaymentRepository _payments;
@@ -24,6 +25,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         IInvoiceService invoices,
         IInventoryService inventory,
         IProductRepository products,
+        IBranchRepository branches,
         ICustomerRepository customers,
         ISettlementService settlements,
         IPaymentRepository payments,
@@ -35,6 +37,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         _invoices = invoices;
         _inventory = inventory;
         _products = products;
+        _branches = branches;
         _customers = customers;
         _settlements = settlements;
         _payments = payments;
@@ -66,9 +69,6 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         if (request.Items.Any(item => item.ProductId == Guid.Empty || item.Quantity <= 0))
             throw new InvalidOperationException("Checkout contains an invalid item.");
 
-        // Normalize duplicate cart lines before any stock validation. POS clients and commerce
-        // adapters may legitimately send the same product more than once; validating each raw
-        // line independently could allow the combined quantity to exceed branch availability.
         IReadOnlyList<CheckoutItem> normalizedItems;
         try
         {
@@ -86,12 +86,17 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
             throw new InvalidOperationException("Checkout product quantity is too large.", exception);
         }
 
-        if (request.CustomerId != Guid.Empty && !await _customers.ExistsAsync(request.CustomerId, cancellationToken))
-            throw new InvalidOperationException("Checkout customer was not found.");
-
+        // A completed idempotent checkout is authoritative. Replays must not fail merely because
+        // mutable branch/customer master data changed after the original sale committed.
         var existing = await _idempotency.GetAsync(idempotencyKey, cancellationToken);
         if (existing is not null)
             return DeserializeResult(existing);
+
+        if (await _branches.GetAsync(request.BranchId, cancellationToken) is null)
+            throw new InvalidOperationException("Checkout branch was not found.");
+
+        if (request.CustomerId != Guid.Empty && !await _customers.ExistsAsync(request.CustomerId, cancellationToken))
+            throw new InvalidOperationException("Checkout customer was not found.");
 
         try
         {
@@ -102,6 +107,11 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     if (existingInsideTransaction is not null)
                         return DeserializeResult(existingInsideTransaction);
 
+                    // Re-check the branch inside the transaction so a new sale cannot commit against
+                    // a branch deleted between the preflight validation and transaction start.
+                    if (await _branches.GetAsync(request.BranchId, transactionCancellationToken) is null)
+                        throw new InvalidOperationException("Checkout branch was not found.");
+
                     var orderItems = new List<OrderItem>(normalizedItems.Count);
                     var receiptLines = new List<ReceiptLine>(normalizedItems.Count);
                     var settlementSales = new List<(Guid ArtistId, Guid ProductId, int Quantity, decimal PurchaseUnitPrice)>();
@@ -111,7 +121,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                         var product = await _products.GetByIdAsync(item.ProductId, transactionCancellationToken)
                             ?? throw new InvalidOperationException($"Product {item.ProductId} was not found.");
 
-                        var available = await _inventory.GetAvailableQuantityAsync(item.ProductId, request.BranchId);
+                        var available = await _inventory.GetAvailableQuantityAsync(item.ProductId, request.BranchId, transactionCancellationToken);
                         if (available < item.Quantity)
                             throw new InvalidOperationException($"Insufficient stock for product {item.ProductId}.");
 
@@ -140,7 +150,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                     }, transactionCancellationToken);
 
                     foreach (var item in orderItems)
-                        await _inventory.AdjustStockAsync(item.ProductId, request.BranchId, -item.Quantity, $"Checkout order {order.Id}");
+                        await _inventory.AdjustStockAsync(item.ProductId, request.BranchId, -item.Quantity, $"Checkout order {order.Id}", transactionCancellationToken);
 
                     var invoice = await _invoices.CreateAsync(new Invoice
                     {
@@ -150,7 +160,7 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
                         BranchId = request.BranchId,
                         TotalAmount = total,
                         CreatedAt = DateTime.UtcNow
-                    });
+                    }, transactionCancellationToken);
 
                     foreach (var sale in settlementSales)
                         await _settlements.RecordSaleAsync(order.Id, sale.ArtistId, sale.ProductId, sale.Quantity, sale.PurchaseUnitPrice, transactionCancellationToken);
