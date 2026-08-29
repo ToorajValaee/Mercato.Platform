@@ -56,6 +56,7 @@ public sealed class ReturnServiceImplementation : IReturnService
             normalizedItems = request.Items
                 .GroupBy(item => item.ProductId)
                 .Select(group => new ReturnItem(group.Key, group.Sum(item => item.Quantity)))
+                .OrderBy(item => item.ProductId)
                 .ToList();
         }
         catch (OverflowException exception)
@@ -79,7 +80,14 @@ public sealed class ReturnServiceImplementation : IReturnService
                 if (sold == 0)
                     throw new InvalidOperationException($"Product {requested.ProductId} was not sold on this order.");
 
-                var alreadyReturned = await _returns.GetReturnedQuantityAsync(order.Id, requested.ProductId, ct);
+                // Hold an order/product advisory lock until the surrounding transaction commits.
+                // A concurrent return for the same sold line must therefore observe this return
+                // before deciding how much remains returnable.
+                var alreadyReturned = await _returns.GetReturnedQuantityAsync(
+                    order.Id,
+                    requested.ProductId,
+                    ct,
+                    serialize: true);
                 if (alreadyReturned + requested.Quantity > sold)
                     throw new InvalidOperationException($"Return quantity exceeds quantity sold for product {requested.ProductId}.");
 
@@ -119,7 +127,12 @@ public sealed class ReturnServiceImplementation : IReturnService
             await _returns.AddAsync(salesReturn, ct);
 
             foreach (var line in returnLines)
-                await _inventory.AdjustStockAsync(line.ProductId, order.BranchId, line.Quantity, $"Return {salesReturn.Id}");
+                await _inventory.AdjustStockAsync(
+                    line.ProductId,
+                    order.BranchId,
+                    line.Quantity,
+                    $"Return {salesReturn.Id}",
+                    ct);
 
             foreach (var reversal in settlementReversals)
                 await _settlements.RecordReturnAsync(order.Id, reversal.ArtistId, reversal.ProductId, reversal.Quantity, reversal.PurchasePrice, ct);
