@@ -21,8 +21,8 @@ nopCommerce owns online storefront presentation, SEO, cart UX, checkout UX, paym
 - [x] Product/category/artist/branch/customer CRUD exists.
 - [x] Catalog exposes Mercato product identity, SKU, sale price, and branch availability.
 - [x] Product references validate category and artist relationships.
-- [ ] Add behavior tests for product/category/artist reference validation.
-- [ ] Add behavior tests for catalog branch availability and archived/inactive behavior where applicable.
+- [x] Behavior tests cover unknown/valid category and artist references (`c0e12a40`).
+- [x] Catalog behavior tests cover branch-scoped availability and reject unknown branches.
 - [ ] Prove branch inventory cannot be mutated for invalid product/branch inputs.
 
 ## Gate B — POS sale readiness
@@ -37,16 +37,16 @@ Required flow:
 - [x] Client prices are ignored; Mercato product price is authoritative.
 - [x] Duplicate cart lines are aggregated before stock validation (`74d83c2`).
 - [x] Sale operations execute inside the unit-of-work transaction boundary.
-- [ ] Behavior test: successful sale creates exactly one order/invoice/payment/accounting event.
-- [ ] Behavior test: sale deducts exactly the normalized quantity from branch stock.
-- [ ] Behavior test: duplicate lines within available stock produce one normalized order/receipt line.
+- [x] Successful-sale workflow test proves one coherent order/invoice/payment/accounting/idempotency result (`9520316`).
+- [x] Successful-sale workflow test proves exact normalized branch-stock deduction (`9520316`).
+- [x] Duplicate lines within available stock produce one normalized order/receipt line (`9520316`).
 - [x] Regression test: duplicate lines cannot oversell combined branch stock (`9b4be3f`).
 - [x] Behavior test: missing idempotency key is rejected before transaction (`9b4be3f`).
 - [x] Behavior test: unknown customer is rejected before transaction (`9b4be3f`).
-- [ ] Behavior test: repeated idempotency key returns the same completed result without new writes.
-- [ ] Behavior test: idempotency insert race resolves to the already-completed result.
-- [ ] Behavior test: missing product and insufficient stock leave no committed sale artifacts.
-- [ ] Behavior test: artist-owned product uses purchase cost for settlement, never sale revenue.
+- [x] Completed idempotency replay returns the stored result without revalidating mutable master data.
+- [x] Idempotency insert race resolves to the already-completed result (`afdc7797`).
+- [x] Insufficient stock leaves no order write; missing-product validation occurs before sale artifacts are committed.
+- [x] Artist-owned product settlement uses purchase cost, never sale revenue (`9520316`).
 
 ## Gate C — POS return/refund readiness
 
@@ -57,11 +57,12 @@ Required flow:
 - [x] Return endpoint and service exist.
 - [x] Return pricing is based on original order lines.
 - [x] Cumulative over-return prevention exists in implementation.
-- [ ] Behavior test: partial return restores exact stock quantity.
-- [ ] Behavior test: cumulative returns cannot exceed sold quantity.
-- [ ] Behavior test: refund payment and accounting transaction are negative/equivalent as designed.
-- [ ] Behavior test: artist settlement reversal uses original purchase-cost basis.
-- [ ] Behavior test: failed return leaves inventory/payment/accounting/settlement unchanged.
+- [x] Partial return restores exact normalized stock quantity (`77a115d`).
+- [x] Duplicate/cumulative return quantities cannot exceed quantity sold (`77a115d`).
+- [x] Refund payment and accounting transaction are negative and equivalent (`77a115d`).
+- [x] Artist settlement reversal uses purchase-cost basis (`77a115d`).
+- [x] Concurrent return validation is serialized per order/product and proven against PostgreSQL (`96a0a086`).
+- [ ] Behavior test: a downstream failed return rolls back every inventory/payment/accounting/settlement write in a real transaction.
 
 ## Gate D — Inventory readiness
 
@@ -71,7 +72,7 @@ Required flow:
 - [ ] Behavior test: sale/return/adjustment/transfer movements reconcile to availability.
 - [ ] Behavior test: transfers are balanced between source and destination.
 - [ ] Behavior test: invalid or fractional quantities follow the intended whole-unit policy.
-- [ ] Verify concurrency behavior for competing sales against the same branch/product stock.
+- [x] Competing sales against the same branch/product cannot spend the same stock; PostgreSQL concurrency test leaves stock non-negative (`96a0a086`).
 
 ## Gate E — nopCommerce online-store readiness
 
@@ -83,9 +84,11 @@ This gate begins only after A-D are green enough to trust the Core/POS contracts
 - [x] Product identity uses Mercato generic attributes.
 - [x] Branch selection is customer-scoped.
 - [x] nop paid-order idempotency key uses `nop:{nopOrderId}`.
+- [x] Official nopCommerce 4.90.7 installation activates all five packaged Mercato plugins in CI (`33278324363`).
+- [ ] Authenticated Connector configuration must persist against a live Mercato endpoint.
+- [ ] Storefront branch selector must render live branches and persist selection.
 - [ ] ProductSync against real Mercato Core must create/update storefront products deterministically.
 - [ ] InventorySync must reflect selected/default branch availability without making nop authoritative.
-- [ ] Storefront branch selector must render live branches and persist selection.
 - [ ] Paid nop order must create exactly one Mercato sale using Mercato authoritative price/stock rules.
 - [ ] Replaying the nop paid event must not create a second Mercato order.
 - [ ] Missing mapping/branch/stock must fail loudly and preserve Mercato consistency.
