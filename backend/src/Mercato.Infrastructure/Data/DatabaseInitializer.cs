@@ -11,13 +11,19 @@ public static class DatabaseInitializer
     {
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
+                // Database creation/migration runs once during application startup. Use the
+                // provider's synchronous connection path here deliberately: on constrained
+                // hosted runners the async DNS worker can fail with SocketError.TryAgain even
+                // for a literal loopback address. Request-time database operations remain async.
                 var migrations = context.Database.GetMigrations();
                 if (migrations.Any())
-                    await context.Database.MigrateAsync(cancellationToken);
+                    context.Database.Migrate();
                 else
-                    await context.Database.EnsureCreatedAsync(cancellationToken);
+                    context.Database.EnsureCreated();
 
                 return;
             }
