@@ -6,11 +6,16 @@ namespace Mercato.Application.Services;
 public sealed class ProductCatalogServiceImplementation : IProductCatalogService
 {
     private readonly IProductRepository _products;
+    private readonly IBranchRepository _branches;
     private readonly IInventoryService _inventory;
 
-    public ProductCatalogServiceImplementation(IProductRepository products, IInventoryService inventory)
+    public ProductCatalogServiceImplementation(
+        IProductRepository products,
+        IBranchRepository branches,
+        IInventoryService inventory)
     {
         _products = products;
+        _branches = branches;
         _inventory = inventory;
     }
 
@@ -18,14 +23,29 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
         Guid? branchId = null,
         CancellationToken cancellationToken = default)
     {
+        Guid? normalizedBranchId = branchId is Guid branch && branch != Guid.Empty
+            ? branch
+            : null;
+
+        if (normalizedBranchId is Guid requestedBranch &&
+            await _branches.GetAsync(requestedBranch, cancellationToken) is null)
+        {
+            throw new InvalidOperationException("Catalog branch was not found.");
+        }
+
         var products = await _products.GetAllAsync(cancellationToken);
         var result = new List<CatalogProductDto>(products.Count);
 
         foreach (var product in products)
         {
             int? available = null;
-            if (branchId is Guid branch && branch != Guid.Empty)
-                available = await _inventory.GetAvailableQuantityAsync(product.Id, branch);
+            if (normalizedBranchId is Guid selectedBranch)
+            {
+                available = await _inventory.GetAvailableQuantityAsync(
+                    product.Id,
+                    selectedBranch,
+                    cancellationToken);
+            }
 
             result.Add(new CatalogProductDto(
                 product.Id,
@@ -34,7 +54,7 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
                 product.SalePrice,
                 product.CategoryId,
                 product.ArtistId,
-                branchId,
+                normalizedBranchId,
                 available));
         }
 
