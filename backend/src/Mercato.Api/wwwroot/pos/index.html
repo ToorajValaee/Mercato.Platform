@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mercato POS</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#171717; background:#f5f5f4; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; }
+    .hidden { display:none!important; }
+    .topbar { position:sticky; top:0; z-index:5; display:flex; gap:16px; align-items:center; justify-content:space-between; padding:14px 20px; background:#111827; color:white; box-shadow:0 2px 12px #0002; }
+    .brand { font-size:20px; font-weight:800; letter-spacing:.02em; }
+    .top-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .status { font-size:13px; color:#d1d5db; }
+    .shell { max-width:1500px; margin:0 auto; padding:18px; }
+    .card { background:white; border:1px solid #e7e5e4; border-radius:14px; box-shadow:0 4px 18px #00000008; }
+    .login { width:min(460px,calc(100vw - 32px)); margin:9vh auto; padding:28px; }
+    h1,h2,h3,p { margin-top:0; }
+    label { display:block; font-size:13px; font-weight:700; color:#57534e; margin:13px 0 6px; }
+    input,select { width:100%; border:1px solid #d6d3d1; border-radius:9px; padding:10px 12px; background:white; outline:none; }
+    input:focus,select:focus { border-color:#2563eb; box-shadow:0 0 0 3px #2563eb20; }
+    .btn { border:0; border-radius:9px; padding:10px 14px; font-weight:750; background:#e7e5e4; color:#1c1917; }
+    .btn.primary { background:#2563eb; color:white; }
+    .btn.success { background:#15803d; color:white; }
+    .btn.danger { background:#b91c1c; color:white; }
+    .btn.small { padding:6px 9px; font-size:13px; }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .error { margin-top:12px; padding:10px 12px; border-radius:9px; background:#fee2e2; color:#991b1b; font-size:14px; }
+    .notice { margin-top:12px; padding:10px 12px; border-radius:9px; background:#dcfce7; color:#166534; font-size:14px; }
+    .workspace { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(330px,.8fr); gap:18px; }
+    .catalog { padding:16px; min-height:70vh; }
+    .catalog-head { display:grid; grid-template-columns:1fr 230px; gap:10px; margin-bottom:14px; }
+    .products { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+    .product { border:1px solid #e7e5e4; border-radius:12px; padding:13px; display:flex; flex-direction:column; min-height:145px; }
+    .product-name { font-weight:800; line-height:1.25; }
+    .sku { margin-top:4px; font-size:12px; color:#78716c; word-break:break-all; }
+    .price { margin-top:auto; font-size:19px; font-weight:850; }
+    .stock { font-size:12px; color:#57534e; margin:2px 0 9px; }
+    .stock.zero { color:#b91c1c; font-weight:700; }
+    .side { display:flex; flex-direction:column; gap:18px; }
+    .panel { padding:16px; }
+    .cart-line { display:grid; grid-template-columns:1fr auto; gap:8px; padding:10px 0; border-bottom:1px solid #eee; }
+    .cart-line:last-child { border-bottom:0; }
+    .qty { display:flex; align-items:center; gap:6px; }
+    .qty span { min-width:25px; text-align:center; font-weight:800; }
+    .muted { color:#78716c; font-size:13px; }
+    .total { display:flex; justify-content:space-between; font-size:22px; font-weight:900; padding:14px 0; }
+    .checkout-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .checkout-grid .wide { grid-column:1/-1; }
+    .receipt { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; border:1px dashed #a8a29e; border-radius:10px; padding:14px; background:#fafaf9; }
+    .receipt-row { display:flex; justify-content:space-between; gap:12px; margin:5px 0; }
+    .receipt hr { border:0; border-top:1px dashed #a8a29e; margin:10px 0; }
+    .return-line { display:grid; grid-template-columns:1fr 90px; gap:10px; align-items:end; border-bottom:1px solid #eee; padding:9px 0; }
+    .return-line:last-child { border-bottom:0; }
+    .empty { padding:30px 10px; text-align:center; color:#78716c; }
+    @media(max-width:900px){ .workspace{grid-template-columns:1fr}.catalog-head{grid-template-columns:1fr}.topbar{align-items:flex-start;flex-direction:column}.top-actions{width:100%} }
+    @media print { body *{visibility:hidden}.printable,.printable *{visibility:visible}.printable{position:absolute;left:0;top:0;width:100%;box-shadow:none;border:0}.no-print{display:none!important} }
+  </style>
+</head>
+<body>
+  <section id="loginView" class="card login">
+    <h1>Mercato POS</h1>
+    <p class="muted">Sign in with an Admin, Manager, or Cashier account.</p>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required />
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required />
+      <button class="btn primary" style="width:100%;margin-top:18px" type="submit">Sign in</button>
+    </form>
+    <div id="loginError" class="error hidden"></div>
+  </section>
+
+  <section id="appView" class="hidden">
+    <header class="topbar">
+      <div>
+        <div class="brand">Mercato POS</div>
+        <div id="staffLabel" class="status"></div>
+      </div>
+      <div class="top-actions">
+        <select id="branchSelect" style="min-width:230px"></select>
+        <button id="refreshBtn" class="btn small">Refresh stock</button>
+        <button id="logoutBtn" class="btn small">Sign out</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <div id="globalError" class="error hidden"></div>
+      <div id="globalNotice" class="notice hidden"></div>
+      <div class="workspace">
+        <section class="card catalog">
+          <div class="catalog-head">
+            <input id="searchInput" type="search" placeholder="Search product name or SKU…" />
+            <select id="stockFilter">
+              <option value="all">All products</option>
+              <option value="in">In stock</option>
+              <option value="out">Out of stock</option>
+            </select>
+          </div>
+          <div id="products" class="products"></div>
+        </section>
+
+        <aside class="side">
+          <section class="card panel">
+            <h2>Cart</h2>
+            <div id="cart"></div>
+            <div class="total"><span>Total</span><span id="cartTotal">0.00</span></div>
+            <div class="checkout-grid">
+              <div class="wide">
+                <label for="paymentMethod">Payment method</label>
+                <input id="paymentMethod" value="Cash" placeholder="Cash, Card, ..." />
+              </div>
+              <div class="wide">
+                <label for="customerId">Customer ID (optional)</label>
+                <input id="customerId" placeholder="Leave empty for guest sale" />
+              </div>
+              <button id="clearCartBtn" class="btn">Clear</button>
+              <button id="checkoutBtn" class="btn success">Pay</button>
+            </div>
+          </section>
+
+          <section id="receiptPanel" class="card panel hidden printable">
+            <h2>Receipt</h2>
+            <div id="receipt" class="receipt"></div>
+            <div class="no-print" style="display:flex;gap:8px;margin-top:12px">
+              <button id="printBtn" class="btn">Print</button>
+              <button id="prepareReturnBtn" class="btn">Return items</button>
+            </div>
+          </section>
+
+          <section class="card panel no-print">
+            <h2>Return / Refund</h2>
+            <label for="returnOrderId">Order ID</label>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px">
+              <input id="returnOrderId" placeholder="Paste an order ID" />
+              <button id="loadOrderBtn" class="btn">Load</button>
+            </div>
+            <div id="returnOrder" style="margin-top:12px"></div>
+            <label for="refundMethod">Refund method</label>
+            <input id="refundMethod" value="Cash" />
+            <button id="submitReturnBtn" class="btn danger" style="width:100%;margin-top:12px" disabled>Refund selected quantities</button>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </section>
+
+<script>
+(() => {
+  const state = { token:null, user:null, branches:[], branchId:null, catalog:[], cart:new Map(), receipt:null, returnOrder:null };
+  const $ = id => document.getElementById(id);
+  const money = value => Number(value || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const guidEmpty = '00000000-0000-0000-0000-000000000000';
+
+  function message(text, kind='error') {
+    const target = kind === 'notice' ? $('globalNotice') : $('globalError');
+    const other = kind === 'notice' ? $('globalError') : $('globalNotice');
+    other.classList.add('hidden');
+    target.textContent = text;
+    target.classList.toggle('hidden', !text);
+    if (text) setTimeout(() => target.classList.add('hidden'), 6000);
+  }
+
+  async function api(path, options={}) {
+    const headers = { ...(options.headers || {}) };
+    if (state.token) headers.Authorization = `Bearer ${state.token}`;
+    if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    const response = await fetch(path, {...options,headers});
+    const text = await response.text();
+    let payload = null;
+    if (text) { try { payload = JSON.parse(text); } catch { payload = text; } }
+    if (!response.ok) {
+      if (response.status === 401) { logout(); throw new Error('Your session expired. Sign in again.'); }
+      const detail = payload?.error || payload?.title || (typeof payload === 'string' ? payload : null) || `Request failed (${response.status})`;
+      throw new Error(detail);
+    }
+    return payload;
+  }
+
+  async function login(email,password) {
+    const result = await api('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});
+    state.token = result.token;
+    state.user = result.user;
+    sessionStorage.setItem('mercato.pos.token', state.token);
+    sessionStorage.setItem('mercato.pos.user', JSON.stringify(state.user));
+    await enterApp();
+  }
+
+  async function enterApp() {
+    $('loginView').classList.add('hidden');
+    $('appView').classList.remove('hidden');
+    $('staffLabel').textContent = `${state.user?.email || 'Staff'} · ${state.user?.role || ''}`;
+    await loadBranches();
+  }
+
+  function logout() {
+    state.token=null; state.user=null; state.branches=[]; state.catalog=[]; state.cart.clear(); state.receipt=null;
+    sessionStorage.removeItem('mercato.pos.token'); sessionStorage.removeItem('mercato.pos.user');
+    $('appView').classList.add('hidden'); $('loginView').classList.remove('hidden');
+    $('loginError').classList.add('hidden');
+  }
+
+  async function loadBranches() {
+    state.branches = await api('/api/branches');
+    if (!state.branches.length) {
+      $('branchSelect').innerHTML='<option value="">No branches configured</option>';
+      state.branchId=null; state.catalog=[]; renderProducts();
+      message('No branch exists yet. Create a branch through the management API before selling.');
+      return;
+    }
+    const previous = state.branchId;
+    $('branchSelect').innerHTML = state.branches.map(b=>`<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)}</option>`).join('');
+    state.branchId = state.branches.some(b=>b.id===previous) ? previous : state.branches[0].id;
+    $('branchSelect').value=state.branchId;
+    state.cart.clear(); renderCart();
+    await loadCatalog();
+  }
+
+  async function loadCatalog() {
+    if (!state.branchId) return;
+    state.catalog = await api(`/api/catalog?branchId=${encodeURIComponent(state.branchId)}`);
+    renderProducts();
+  }
+
+  function filteredCatalog() {
+    const q=$('searchInput').value.trim().toLowerCase();
+    const filter=$('stockFilter').value;
+    return state.catalog.filter(p => {
+      const match=!q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q);
+      const stock=Number(p.availableQuantity || 0);
+      return match && (filter==='all' || (filter==='in' ? stock>0 : stock<=0));
+    });
+  }
+
+  function renderProducts() {
+    const items=filteredCatalog();
+    $('products').innerHTML = items.length ? items.map(p => {
+      const stock=Number(p.availableQuantity || 0);
+      return `<article class="product">
+        <div class="product-name">${escapeHtml(p.name)}</div>
+        <div class="sku">${escapeHtml(p.sku || p.productId)}</div>
+        <div class="price">${money(p.salePrice)}</div>
+        <div class="stock ${stock<=0?'zero':''}">${stock} available</div>
+        <button class="btn primary add-product" data-product="${escapeHtml(p.productId)}" ${stock<=0?'disabled':''}>Add to cart</button>
+      </article>`;
+    }).join('') : '<div class="empty">No products match this view.</div>';
+  }
+
+  function addProduct(productId) {
+    const product=state.catalog.find(p=>p.productId===productId); if(!product) return;
+    const current=state.cart.get(productId)||0;
+    const max=Number(product.availableQuantity||0);
+    if(current>=max) { message(`Only ${max} unit(s) of ${product.name} are available.`); return; }
+    state.cart.set(productId,current+1); renderCart();
+  }
+
+  function changeQty(productId, delta) {
+    const product=state.catalog.find(p=>p.productId===productId); if(!product) return;
+    const next=(state.cart.get(productId)||0)+delta;
+    if(next<=0) state.cart.delete(productId);
+    else if(next<=Number(product.availableQuantity||0)) state.cart.set(productId,next);
+    else message(`Only ${product.availableQuantity} unit(s) of ${product.name} are available.`);
+    renderCart();
+  }
+
+  function renderCart() {
+    const lines=[...state.cart.entries()].map(([id,quantity])=>({product:state.catalog.find(p=>p.productId===id),quantity})).filter(x=>x.product);
+    $('cart').innerHTML=lines.length ? lines.map(({product,quantity})=>`<div class="cart-line">
+      <div><strong>${escapeHtml(product.name)}</strong><div class="muted">${money(product.salePrice)} each</div></div>
+      <div class="qty"><button class="btn small cart-minus" data-product="${product.productId}">−</button><span>${quantity}</span><button class="btn small cart-plus" data-product="${product.productId}">+</button></div>
+    </div>`).join('') : '<div class="empty">Cart is empty.</div>';
+    const total=lines.reduce((sum,x)=>sum+x.quantity*Number(x.product.salePrice),0);
+    $('cartTotal').textContent=money(total);
+    $('checkoutBtn').disabled=!lines.length || !state.branchId;
+  }
+
+  async function checkout() {
+    if (!state.cart.size || !state.branchId) return;
+    const paymentMethod=$('paymentMethod').value.trim();
+    if(!paymentMethod) { message('Enter a payment method.'); return; }
+    const customerText=$('customerId').value.trim();
+    const idempotencyKey = crypto.randomUUID ? `pos:${crypto.randomUUID()}` : `pos:${Date.now()}:${Math.random()}`;
+    const request={
+      branchId:state.branchId,
+      customerId:customerText || guidEmpty,
+      paymentMethod,
+      idempotencyKey,
+      items:[...state.cart.entries()].map(([productId,quantity])=>({productId,quantity}))
+    };
+    $('checkoutBtn').disabled=true;
+    try {
+      const result=await api('/api/pos/checkout',{method:'POST',body:JSON.stringify(request)});
+      state.receipt=result; renderReceipt(result);
+      state.cart.clear(); renderCart();
+      $('returnOrderId').value=result.orderId;
+      message(`Sale completed. Order ${result.orderId}`,'notice');
+      await loadCatalog();
+    } catch(error) { message(error.message); renderCart(); }
+  }
+
+  function renderReceipt(result) {
+    const lines=(result.items||[]).map(line=>`<div class="receipt-row"><span>${escapeHtml(line.name)} × ${line.quantity}</span><span>${money(line.lineTotal)}</span></div>`).join('');
+    $('receipt').innerHTML=`
+      <div><strong>Mercato POS</strong></div>
+      <div class="muted">Order ${escapeHtml(result.orderId)}</div>
+      <div class="muted">${escapeHtml(new Date(result.paidAtUtc).toLocaleString())}</div>
+      <hr>${lines}<hr>
+      <div class="receipt-row"><strong>Total</strong><strong>${money(result.total)}</strong></div>
+      <div class="receipt-row"><span>Payment</span><span>${escapeHtml(result.paymentMethod)}</span></div>
+      <div class="receipt-row"><span>Reference</span><span>${escapeHtml(result.receiptReference)}</span></div>`;
+    $('receiptPanel').classList.remove('hidden');
+  }
+
+  async function loadReturnOrder(orderId) {
+    orderId=(orderId||'').trim(); if(!orderId) { message('Enter an order ID.'); return; }
+    try {
+      state.returnOrder=await api(`/api/pos/orders/${encodeURIComponent(orderId)}`);
+      renderReturnOrder();
+    } catch(error) { state.returnOrder=null; renderReturnOrder(); message(error.message); }
+  }
+
+  function renderReturnOrder() {
+    const order=state.returnOrder;
+    if(!order) { $('returnOrder').innerHTML='<div class="muted">Load an order to select returned quantities.</div>'; $('submitReturnBtn').disabled=true; return; }
+    $('returnOrder').innerHTML=`<div class="muted">Order total ${money(order.totalAmount)} · ${escapeHtml(new Date(order.createdAtUtc).toLocaleString())}</div>` +
+      order.items.map(item=>`<div class="return-line">
+        <div><strong>${escapeHtml(item.productId)}</strong><div class="muted">Sold ${item.quantity} × ${money(item.unitPrice)}</div></div>
+        <div><label style="margin-top:0">Return</label><input class="return-qty" data-product="${item.productId}" type="number" min="0" max="${item.quantity}" step="1" value="0" /></div>
+      </div>`).join('');
+    $('submitReturnBtn').disabled=false;
+  }
+
+  async function submitReturn() {
+    const order=state.returnOrder; if(!order) return;
+    const items=[...document.querySelectorAll('.return-qty')].map(input=>({productId:input.dataset.product,quantity:Number(input.value||0)})).filter(x=>Number.isInteger(x.quantity)&&x.quantity>0);
+    if(!items.length) { message('Select at least one quantity to return.'); return; }
+    const refundMethod=$('refundMethod').value.trim(); if(!refundMethod){message('Enter a refund method.');return;}
+    $('submitReturnBtn').disabled=true;
+    try {
+      const result=await api('/api/pos/returns',{method:'POST',body:JSON.stringify({orderId:order.id,refundMethod,items})});
+      message(`Refund completed: ${result.reference} · ${money(result.total)}`,'notice');
+      await loadCatalog();
+      await loadReturnOrder(order.id);
+    } catch(error) { message(error.message); renderReturnOrder(); }
+  }
+
+  $('loginForm').addEventListener('submit', async event => {
+    event.preventDefault(); $('loginError').classList.add('hidden');
+    try { await login($('email').value,$('password').value); }
+    catch(error){ $('loginError').textContent=error.message; $('loginError').classList.remove('hidden'); }
+  });
+  $('logoutBtn').addEventListener('click',logout);
+  $('refreshBtn').addEventListener('click',()=>loadCatalog().catch(e=>message(e.message)));
+  $('branchSelect').addEventListener('change', async event=>{ state.branchId=event.target.value||null; state.cart.clear(); renderCart(); await loadCatalog(); });
+  $('searchInput').addEventListener('input',renderProducts);
+  $('stockFilter').addEventListener('change',renderProducts);
+  $('products').addEventListener('click',e=>{const b=e.target.closest('.add-product');if(b)addProduct(b.dataset.product);});
+  $('cart').addEventListener('click',e=>{const minus=e.target.closest('.cart-minus');const plus=e.target.closest('.cart-plus');if(minus)changeQty(minus.dataset.product,-1);if(plus)changeQty(plus.dataset.product,1);});
+  $('clearCartBtn').addEventListener('click',()=>{state.cart.clear();renderCart();});
+  $('checkoutBtn').addEventListener('click',checkout);
+  $('printBtn').addEventListener('click',()=>window.print());
+  $('prepareReturnBtn').addEventListener('click',()=>{if(state.receipt){$('returnOrderId').value=state.receipt.orderId;loadReturnOrder(state.receipt.orderId);}});
+  $('loadOrderBtn').addEventListener('click',()=>loadReturnOrder($('returnOrderId').value));
+  $('submitReturnBtn').addEventListener('click',submitReturn);
+
+  const savedToken=sessionStorage.getItem('mercato.pos.token');
+  const savedUser=sessionStorage.getItem('mercato.pos.user');
+  if(savedToken && savedUser){
+    try { state.token=savedToken;state.user=JSON.parse(savedUser);enterApp().catch(e=>{logout();$('loginError').textContent=e.message;$('loginError').classList.remove('hidden');}); }
+    catch { logout(); }
+  }
+  renderCart(); renderReturnOrder();
+})();
+</script>
+</body>
+</html>
