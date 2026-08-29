@@ -72,6 +72,38 @@ using (var scope = app.Services.CreateScope())
             await dbContext.SaveChangesAsync();
         }
     }
+
+    if (configuration.GetValue<bool>("BootstrapDemoData:Enabled") &&
+        !await dbContext.Branches.AnyAsync() &&
+        !await dbContext.Products.AnyAsync())
+    {
+        var branchId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        var products = new[]
+        {
+            new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000001"), Name = "Ceramic Cup", Sku = "DEMO-CUP", PurchasePrice = 5m, SalePrice = 12.50m },
+            new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000002"), Name = "Canvas Tote", Sku = "DEMO-TOTE", PurchasePrice = 7m, SalePrice = 18m },
+            new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000003"), Name = "Notebook", Sku = "DEMO-NOTE", PurchasePrice = 3m, SalePrice = 9.75m },
+            new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000004"), Name = "Art Print", Sku = "DEMO-PRINT", PurchasePrice = 8m, SalePrice = 24m }
+        };
+
+        dbContext.Branches.Add(new Branch
+        {
+            Id = branchId,
+            Name = "Demo Store",
+            Address = "Local POS demo"
+        });
+        dbContext.Products.AddRange(products);
+        dbContext.StockMovements.AddRange(products.Select((product, index) => new StockMovement
+        {
+            Id = Guid.NewGuid(),
+            BranchId = branchId,
+            ProductId = product.Id,
+            Quantity = 12 + index * 3,
+            Type = "Demo opening stock",
+            CreatedAtUtc = DateTime.UtcNow
+        }));
+        await dbContext.SaveChangesAsync();
+    }
 }
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "Mercato.Api" }));
