@@ -30,6 +30,10 @@ public class MercatoDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // System.Object is never a Mercato persistence entity. Keep an accidental untyped
+        // property/navigation from poisoning the relational model at startup.
+        modelBuilder.Ignore<object>();
+
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
         modelBuilder.ApplyConfiguration(new CategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ArtistConfiguration());
