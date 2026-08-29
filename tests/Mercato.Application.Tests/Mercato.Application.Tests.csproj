@@ -12,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../backend/src/Mercato.Application/Mercato.Application.csproj" />
+    <ProjectReference Include="../../backend/src/Mercato.Infrastructure/Mercato.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
