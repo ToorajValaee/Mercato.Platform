@@ -69,15 +69,18 @@ jobs:
       - name: Build backend
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
-      - name: Test backend
-        env:
-          MERCATO_TEST_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_test;Username=postgres;Password=postgres
-        run: dotnet test backend/Mercato.Platform.sln --configuration Release --no-build
-
+      # Exercise the real HTTP POS before the integration tests repeatedly recreate their
+      # PostgreSQL database. This keeps the runtime acceptance isolated from test-runner
+      # socket/thread exhaustion while still gating every downstream nopCommerce step.
       - name: Run POS runtime smoke test
         env:
           MERCATO_POS_SMOKE_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_pos_smoke;Username=postgres;Password=postgres
         run: bash backend/pos-runtime-smoke.sh
+
+      - name: Test backend
+        env:
+          MERCATO_TEST_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_test;Username=postgres;Password=postgres
+        run: dotnet test backend/Mercato.Platform.sln --configuration Release --no-build
 
       # nopCommerce remains in CI for regression safety, but current development is intentionally
       # gated on Core/POS acceptance before any further nop feature work.
