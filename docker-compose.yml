@@ -1,12 +1,20 @@
 services:
   mercato-api:
     build:
-      context: ./backend/src/Mercato.Api
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
       MERCATO_CONNECTION_STRING: Host=postgres;Database=mercato;Username=postgres;Password=postgres
+      Jwt__Issuer: Mercato.Api
+      Jwt__Audience: Mercato.Client
+      Jwt__Key: ${MERCATO_JWT_KEY:-Mercato-Local-Development-Key-Change-Me-2026}
+      BootstrapAdmin__Email: ${MERCATO_BOOTSTRAP_ADMIN_EMAIL:-admin@mercato.local}
+      BootstrapAdmin__Password: ${MERCATO_BOOTSTRAP_ADMIN_PASSWORD:-MercatoLocal123!}
+      BootstrapDemoData__Enabled: ${MERCATO_BOOTSTRAP_DEMO_DATA:-true}
     depends_on:
       postgres:
         condition: service_healthy
