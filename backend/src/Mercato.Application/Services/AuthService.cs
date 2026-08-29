@@ -19,15 +19,14 @@ public sealed class AuthService : IAuthService
 
     public async Task RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
     {
-        var existing = await _userRepository.GetByEmailAsync(email, cancellationToken);
+        var normalizedEmail = email.Trim();
+        var existing = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
         if (existing is not null)
-        {
             throw new InvalidOperationException("Email already exists.");
-        }
 
         var user = new User
         {
-            Email = email,
+            Email = normalizedEmail,
             PasswordHash = _passwordService.Hash(password),
             Role = "User"
         };
@@ -35,15 +34,14 @@ public sealed class AuthService : IAuthService
         await _userRepository.AddAsync(user, cancellationToken);
     }
 
-    public async Task<string> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<AuthenticatedUser> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
-        var user = await _userRepository.GetByEmailAsync(email, cancellationToken);
+        var normalizedEmail = email.Trim();
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
 
         if (user is null || !_passwordService.Verify(password, user.PasswordHash))
-        {
             throw new UnauthorizedAccessException("Invalid credentials.");
-        }
 
-        return user.Id.ToString();
+        return new AuthenticatedUser(user.Id, user.Email, user.Role);
     }
 }
