@@ -1,10 +1,12 @@
 using System;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Mercato.Application.DTOs;
 using Mercato.Application.Interfaces;
 using Mercato.Application.Repositories;
 using Mercato.Application.Services;
+using Mercato.Domain.Entities;
 using Moq;
 using Xunit;
 
@@ -35,17 +37,56 @@ public class CheckoutTests
     }
 
     [Fact]
+    public async Task Checkout_Rejects_Unknown_Branch_Before_Transaction()
+    {
+        var fixture = CreateFixture();
+        var branchId = Guid.NewGuid();
+
+        fixture.Idempotency
+            .Setup(repository => repository.GetAsync("branch-validation", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CheckoutIdempotencyRecord?)null);
+        fixture.Branches
+            .Setup(repository => repository.GetAsync(branchId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Branch?)null);
+
+        var request = new CheckoutRequest
+        {
+            BranchId = branchId,
+            PaymentMethod = "Cash",
+            IdempotencyKey = "branch-validation",
+            Items = new[] { new CheckoutItem { ProductId = Guid.NewGuid(), Quantity = 1 } }
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.CheckoutAsync(request));
+
+        Assert.Equal("Checkout branch was not found.", exception.Message);
+        fixture.UnitOfWork.Verify(
+            unitOfWork => unitOfWork.ExecuteInTransactionAsync(
+                It.IsAny<Func<CancellationToken, Task<CheckoutResult>>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task Checkout_Rejects_Unknown_Customer_Before_Transaction()
     {
         var fixture = CreateFixture();
+        var branchId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
+
+        fixture.Idempotency
+            .Setup(repository => repository.GetAsync("customer-validation", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CheckoutIdempotencyRecord?)null);
+        fixture.Branches
+            .Setup(repository => repository.GetAsync(branchId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Branch { Id = branchId, Name = "Main" });
         fixture.Customers
             .Setup(repository => repository.ExistsAsync(customerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         var request = new CheckoutRequest
         {
-            BranchId = Guid.NewGuid(),
+            BranchId = branchId,
             CustomerId = customerId,
             PaymentMethod = "Cash",
             IdempotencyKey = "customer-validation",
@@ -63,6 +104,52 @@ public class CheckoutTests
     }
 
     [Fact]
+    public async Task Checkout_Replays_Completed_Result_Without_Revalidating_Mutable_Master_Data()
+    {
+        var fixture = CreateFixture();
+        var branchId = Guid.NewGuid();
+        var expected = new CheckoutResult
+        {
+            OrderId = Guid.NewGuid(),
+            InvoiceId = Guid.NewGuid(),
+            PaymentId = Guid.NewGuid(),
+            BranchId = branchId,
+            Total = 25m,
+            PaymentMethod = "Online",
+            ReceiptReference = "NOP-REPLAY",
+            PaidAtUtc = DateTime.UtcNow,
+            Status = "Completed"
+        };
+
+        fixture.Idempotency
+            .Setup(repository => repository.GetAsync("nop:42", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CheckoutIdempotencyRecord
+            {
+                Id = Guid.NewGuid(),
+                IdempotencyKey = "nop:42",
+                ResponseJson = JsonSerializer.Serialize(expected),
+                CreatedAtUtc = DateTime.UtcNow
+            });
+
+        var result = await fixture.Service.CheckoutAsync(new CheckoutRequest
+        {
+            BranchId = branchId,
+            CustomerId = Guid.NewGuid(),
+            PaymentMethod = "Online",
+            IdempotencyKey = "nop:42",
+            Items = new[] { new CheckoutItem { ProductId = Guid.NewGuid(), Quantity = 1 } }
+        });
+
+        Assert.Equal(expected.OrderId, result.OrderId);
+        Assert.Equal(expected.InvoiceId, result.InvoiceId);
+        Assert.Equal(expected.PaymentId, result.PaymentId);
+        Assert.Equal(expected.Total, result.Total);
+        fixture.Branches.VerifyNoOtherCalls();
+        fixture.Customers.VerifyNoOtherCalls();
+        fixture.UnitOfWork.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Checkout_Aggregates_Duplicate_Product_Lines_Before_Stock_Validation()
     {
         var fixture = CreateFixture();
@@ -71,7 +158,10 @@ public class CheckoutTests
 
         fixture.Idempotency
             .Setup(repository => repository.GetAsync("duplicate-lines", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Mercato.Domain.Entities.CheckoutIdempotencyRecord?)null);
+            .ReturnsAsync((CheckoutIdempotencyRecord?)null);
+        fixture.Branches
+            .Setup(repository => repository.GetAsync(branchId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Branch { Id = branchId, Name = "Main" });
         fixture.Products
             .Setup(repository => repository.GetByIdAsync(productId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ProductDto(productId, "Test product", "SKU-1", 4m, 10m, null, null));
@@ -103,7 +193,7 @@ public class CheckoutTests
             service => service.GetAvailableQuantityAsync(productId, branchId, It.IsAny<CancellationToken>()),
             Times.Once);
         fixture.Orders.Verify(
-            service => service.CreateAsync(It.IsAny<Mercato.Domain.Entities.Order>(), It.IsAny<CancellationToken>()),
+            service => service.CreateAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -113,6 +203,7 @@ public class CheckoutTests
         var invoices = new Mock<IInvoiceService>(MockBehavior.Strict);
         var inventory = new Mock<IInventoryService>(MockBehavior.Strict);
         var products = new Mock<IProductRepository>(MockBehavior.Strict);
+        var branches = new Mock<IBranchRepository>(MockBehavior.Strict);
         var customers = new Mock<ICustomerRepository>(MockBehavior.Strict);
         var settlements = new Mock<ISettlementService>(MockBehavior.Strict);
         var payments = new Mock<IPaymentRepository>(MockBehavior.Strict);
@@ -125,6 +216,7 @@ public class CheckoutTests
             invoices.Object,
             inventory.Object,
             products.Object,
+            branches.Object,
             customers.Object,
             settlements.Object,
             payments.Object,
@@ -132,7 +224,7 @@ public class CheckoutTests
             idempotency.Object,
             unitOfWork.Object);
 
-        return new CheckoutFixture(service, orders, inventory, products, customers, idempotency, unitOfWork);
+        return new CheckoutFixture(service, orders, inventory, products, branches, customers, idempotency, unitOfWork);
     }
 
     private sealed record CheckoutFixture(
@@ -140,6 +232,7 @@ public class CheckoutTests
         Mock<IOrderService> Orders,
         Mock<IInventoryService> Inventory,
         Mock<IProductRepository> Products,
+        Mock<IBranchRepository> Branches,
         Mock<ICustomerRepository> Customers,
         Mock<ICheckoutIdempotencyRepository> Idempotency,
         Mock<IUnitOfWork> UnitOfWork);
