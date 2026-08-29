@@ -45,13 +45,17 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Prepare nopCommerce PostgreSQL extensions
+      - name: Prepare PostgreSQL test databases
         run: |
           set -euo pipefail
           PG_CONTAINER="$(docker ps --filter "ancestor=postgres:16" --format '{{.ID}}' | head -n 1)"
           test -n "$PG_CONTAINER"
           docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 \
             -c 'CREATE EXTENSION IF NOT EXISTS citext;'
+          docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS mercato_test;'
+          docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE mercato_test;'
 
       - name: Restore backend
         run: dotnet restore backend/Mercato.Platform.sln
@@ -60,6 +64,8 @@ jobs:
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
       - name: Test backend
+        env:
+          MERCATO_TEST_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_test;Username=postgres;Password=postgres
         run: dotnet test backend/Mercato.Platform.sln --configuration Release --no-build
 
       - name: Build nopCommerce integration cores
