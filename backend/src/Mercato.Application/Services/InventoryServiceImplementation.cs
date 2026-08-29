@@ -37,19 +37,17 @@ public sealed class InventoryServiceImplementation : IInventoryService
     {
         await ValidateReferencesAsync(productId, branchId, cancellationToken);
         var integralQuantity = ValidateIntegralQuantity(quantity);
-        if (integralQuantity < 0)
-        {
-            var available = await _inventory.GetAvailableQuantityAsync(branchId, productId, cancellationToken);
-            if (available + integralQuantity < 0)
-                throw new InvalidOperationException("Insufficient stock.");
-        }
 
+        // The repository performs the non-negative check while holding a PostgreSQL
+        // transaction-scoped advisory lock for this branch/product pair. Keeping the check
+        // beside the write closes the concurrent read-then-deduct oversell race.
         await _inventory.AddMovementAsync(
             branchId,
             productId,
             integralQuantity,
             string.IsNullOrWhiteSpace(reason) ? "Adjustment" : reason,
-            cancellationToken);
+            preventNegativeBalance: integralQuantity < 0,
+            cancellationToken: cancellationToken);
     }
 
     public async Task TransferStockAsync(
@@ -70,12 +68,21 @@ public sealed class InventoryServiceImplementation : IInventoryService
         if (integralQuantity <= 0)
             throw new ArgumentException("Transfer quantity must be positive.", nameof(quantity));
 
-        var available = await _inventory.GetAvailableQuantityAsync(fromBranchId, productId, cancellationToken);
-        if (available < integralQuantity)
-            throw new InvalidOperationException("Insufficient source stock.");
+        await _inventory.AddMovementAsync(
+            fromBranchId,
+            productId,
+            -integralQuantity,
+            "Transfer-Out",
+            preventNegativeBalance: true,
+            cancellationToken: cancellationToken);
 
-        await _inventory.AddMovementAsync(fromBranchId, productId, -integralQuantity, "Transfer-Out", cancellationToken);
-        await _inventory.AddMovementAsync(toBranchId, productId, integralQuantity, "Transfer-In", cancellationToken);
+        await _inventory.AddMovementAsync(
+            toBranchId,
+            productId,
+            integralQuantity,
+            "Transfer-In",
+            preventNegativeBalance: false,
+            cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<StockMovementDto>> GetMovementsAsync(
