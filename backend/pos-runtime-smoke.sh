@@ -7,7 +7,7 @@ ADMIN_EMAIL="${MERCATO_POS_ADMIN_EMAIL:-admin@mercato.local}"
 ADMIN_PASSWORD="${MERCATO_POS_ADMIN_PASSWORD:-MercatoLocal123!}"
 JWT_KEY="${MERCATO_POS_JWT_KEY:-Mercato-POS-Smoke-JWT-Key-Change-Me-2026}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_PROJECT="$ROOT_DIR/backend/src/Mercato.Api/Mercato.Api.csproj"
+API_DLL="$ROOT_DIR/backend/src/Mercato.Api/bin/Release/net10.0/Mercato.Api.dll"
 WORK_DIR="${RUNNER_TEMP:-/tmp}/mercato-pos-runtime"
 LOG_FILE="$WORK_DIR/api.log"
 LOGIN_JSON="$WORK_DIR/login.json"
@@ -18,6 +18,11 @@ CATALOG_AFTER_RETURN="$WORK_DIR/catalog-after-return.json"
 CHECKOUT_JSON="$WORK_DIR/checkout.json"
 RETURN_JSON="$WORK_DIR/return.json"
 POS_HTML="$WORK_DIR/pos.html"
+
+if [[ ! -f "$API_DLL" ]]; then
+  echo "Built Mercato API was not found at $API_DLL. Build Release before running this smoke test." >&2
+  exit 2
+fi
 
 mkdir -p "$WORK_DIR"
 rm -f "$LOG_FILE" "$LOGIN_JSON" "$BRANCHES_JSON" "$CATALOG_BEFORE" "$CATALOG_AFTER_SALE" \
@@ -32,8 +37,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The hosted runner can retain MSBuild/Roslyn build-server processes after the Release build.
+# Shut them down before starting the real API so the runtime acceptance uses only the built app
+# and does not inherit SDK process/thread pressure.
+dotnet build-server shutdown >/dev/null 2>&1 || true
+sleep 1
+
 (
-  cd "$ROOT_DIR"
+  cd "$ROOT_DIR/backend/src/Mercato.Api/bin/Release/net10.0"
   ASPNETCORE_ENVIRONMENT=Development \
   ASPNETCORE_URLS="$BASE_URL" \
   MERCATO_CONNECTION_STRING="$DB_CONNECTION" \
@@ -43,7 +54,7 @@ trap cleanup EXIT
   BootstrapAdmin__Email="$ADMIN_EMAIL" \
   BootstrapAdmin__Password="$ADMIN_PASSWORD" \
   BootstrapDemoData__Enabled=true \
-    dotnet run --project "$API_PROJECT" --configuration Release --no-build
+    dotnet "$API_DLL"
 ) >"$LOG_FILE" 2>&1 &
 API_PID=$!
 
@@ -115,7 +126,6 @@ print(data['orderId'])
 PY
 )"
 
-# Replaying the same idempotency key must return the same order and make no second deduction.
 REPLAY_JSON="$WORK_DIR/replay.json"
 curl -fsS \
   "${AUTH[@]}" \
