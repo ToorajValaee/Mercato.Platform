@@ -1,4 +1,4 @@
-name: Backend CI
+name: Core and POS CI
 
 on:
   push:
@@ -9,24 +9,24 @@ on:
       - main
 
 concurrency:
-  group: backend-ci-${{ github.ref }}
+  group: core-pos-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  core-pos:
     runs-on: ubuntu-latest
 
     services:
-      nop-postgres:
+      postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: nopcommerce
+          POSTGRES_DB: mercato
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 55432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d nopcommerce"
+          --health-cmd "pg_isready -U postgres -d mercato"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -35,27 +35,16 @@ jobs:
       - name: Checkout Mercato
         uses: actions/checkout@v4
 
-      - name: Checkout nopCommerce 4.90.7
-        uses: actions/checkout@v4
-        with:
-          repository: nopSolutions/nopCommerce
-          ref: release-4.90.7
-          path: _nopCommerce
-
-      - name: Setup .NET
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Prepare PostgreSQL test databases
         run: |
           set -euo pipefail
           PG_CONTAINER="$(docker ps --filter "ancestor=postgres:16" --format '{{.ID}}' | head -n 1)"
           test -n "$PG_CONTAINER"
-          docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 \
-            -c 'CREATE EXTENSION IF NOT EXISTS citext;'
           for db in mercato_test mercato_pos_smoke; do
             docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
               -c "DROP DATABASE IF EXISTS ${db};"
@@ -69,9 +58,6 @@ jobs:
       - name: Build backend
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
-      # Exercise the real HTTP POS before the integration tests repeatedly recreate their
-      # PostgreSQL database. This keeps the runtime acceptance isolated from test-runner
-      # socket/thread exhaustion while still gating every downstream nopCommerce step.
       - name: Run POS runtime smoke test
         env:
           MERCATO_POS_SMOKE_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_pos_smoke;Username=postgres;Password=postgres
@@ -81,60 +67,3 @@ jobs:
         env:
           MERCATO_TEST_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_test;Username=postgres;Password=postgres
         run: dotnet test backend/Mercato.Platform.sln --configuration Release --no-build
-
-      # nopCommerce remains in CI for regression safety, but current development is intentionally
-      # gated on Core/POS acceptance before any further nop feature work.
-      - name: Build nopCommerce integration cores
-        run: |
-          dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release
-          dotnet build integrations/nopCommerce/Mercato.ProductSync.Plugin/Mercato.ProductSync.Plugin.csproj --configuration Release
-          dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release
-          dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release
-          dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release
-
-      - name: Build nopCommerce 4.90.7 plugins
-        run: |
-          NOP_ROOT="${GITHUB_WORKSPACE}/_nopCommerce"
-          dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
-          dotnet build integrations/nopCommerce/Mercato.ProductSync.Plugin/Mercato.ProductSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
-          dotnet build integrations/nopCommerce/Mercato.InventorySync.Plugin/Mercato.InventorySync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
-          dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
-          dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
-
-      - name: Run nopCommerce installation smoke test
-        id: nop_install_runtime
-        env:
-          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
-          NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
-        run: bash integrations/nopCommerce/runtime-install-smoke.sh
-
-      - name: Run nopCommerce Connector and branch storefront smoke test
-        id: nop_storefront_runtime
-        env:
-          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
-        run: bash integrations/nopCommerce/runtime-config-smoke.sh
-
-      - name: Diagnose nopCommerce runtime failure
-        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure')
-        run: bash integrations/nopCommerce/runtime-diagnostics.sh
-
-      - name: Stage nopCommerce plugin packages
-        run: |
-          set -euo pipefail
-          rm -rf dist/nopCommerce-4.90.7
-          mkdir -p dist/nopCommerce-4.90.7
-          for plugin in Connector ProductSync InventorySync BranchSelector OrderSync; do
-            source="_nopCommerce/src/Presentation/Nop.Web/Plugins/Mercato.${plugin}"
-            target="dist/nopCommerce-4.90.7/Mercato.${plugin}"
-            test -f "$source/plugin.json"
-            test -f "$source/Nop.Plugin.Mercato.${plugin}.dll"
-            mkdir -p "$target"
-            cp -a "$source/." "$target/"
-          done
-
-      - name: Upload nopCommerce plugin packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: mercato-nopcommerce-4.90.7-plugins
-          path: dist/nopCommerce-4.90.7
-          if-no-files-found: error
