@@ -13,4 +13,9 @@ public sealed record ReturnableOrderLineDto(
     int ReturnedQuantity,
     int ReturnableQuantity,
     decimal UnitPrice,
-    decimal LineTotal);
+    decimal LineTotal)
+{
+    // Compatibility field consumed by the initial browser POS. It intentionally represents
+    // the quantity that may still be returned, not the original sold quantity.
+    public int Quantity => ReturnableQuantity;
+}
