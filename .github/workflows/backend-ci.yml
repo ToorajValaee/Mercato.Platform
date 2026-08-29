@@ -79,12 +79,12 @@ jobs:
           dotnet build integrations/nopCommerce/Mercato.BranchSelector.Plugin/Mercato.BranchSelector.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
           dotnet build integrations/nopCommerce/Mercato.OrderSync.Plugin/Mercato.OrderSync.Plugin.csproj --configuration Release -p:NopCommerceRoot="$NOP_ROOT"
 
-      - name: Run nopCommerce runtime installation smoke test
+      - name: Run nopCommerce installation smoke test
         id: nop_runtime
         env:
           NOP_ROOT: ${{ github.workspace }}/_nopCommerce
           NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
-        run: bash integrations/nopCommerce/runtime-smoke.sh
+        run: bash integrations/nopCommerce/runtime-install-smoke.sh
 
       - name: Diagnose nopCommerce runtime failure
         if: failure() && steps.nop_runtime.outcome == 'failure'
