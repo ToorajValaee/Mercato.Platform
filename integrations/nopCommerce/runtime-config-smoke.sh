@@ -31,8 +31,8 @@ if [[ ! -f "$NOP_WEB/Nop.Web.csproj" ]]; then
   echo "Nop.Web.csproj was not found under $NOP_WEB" >&2
   exit 2
 fi
-if [[ ! -f "$NOP_WEB/App_Data/dataSettings.json" ]]; then
-  echo "nopCommerce is not installed; run runtime-install-smoke.sh first." >&2
+if [[ ! -f "$NOP_WEB/App_Data/plugins.json" ]]; then
+  echo "nopCommerce plugin state was not found; run runtime-install-smoke.sh first." >&2
   exit 2
 fi
 
