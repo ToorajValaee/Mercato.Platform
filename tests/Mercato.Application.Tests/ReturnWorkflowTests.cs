@@ -55,7 +55,7 @@ public class ReturnWorkflowTests
             .Setup(repository => repository.GetByOrderIdAsync(orderId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Invoice { Id = invoiceId, OrderId = orderId, BranchId = branchId, TotalAmount = 120m });
         returns
-            .Setup(repository => repository.GetReturnedQuantityAsync(orderId, productId, It.IsAny<CancellationToken>()))
+            .Setup(repository => repository.GetReturnedQuantityAsync(orderId, productId, It.IsAny<CancellationToken>(), true))
             .ReturnsAsync(1);
         products
             .Setup(repository => repository.GetByIdAsync(productId, It.IsAny<CancellationToken>()))
@@ -115,6 +115,8 @@ public class ReturnWorkflowTests
         Assert.Equal(refundPaymentId, result.RefundPaymentId);
         Assert.Equal(60m, result.Total);
 
+        returns.Verify(repository => repository.GetReturnedQuantityAsync(
+            orderId, productId, It.IsAny<CancellationToken>(), true), Times.Once);
         returns.Verify(repository => repository.AddAsync(
             It.Is<SalesReturn>(salesReturn =>
                 salesReturn.OrderId == orderId &&
@@ -184,7 +186,7 @@ public class ReturnWorkflowTests
             .Setup(repository => repository.GetByOrderIdAsync(orderId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Invoice { Id = Guid.NewGuid(), OrderId = orderId, BranchId = branchId });
         returns
-            .Setup(repository => repository.GetReturnedQuantityAsync(orderId, productId, It.IsAny<CancellationToken>()))
+            .Setup(repository => repository.GetReturnedQuantityAsync(orderId, productId, It.IsAny<CancellationToken>(), true))
             .ReturnsAsync(1);
 
         var service = new ReturnServiceImplementation(
@@ -210,6 +212,8 @@ public class ReturnWorkflowTests
         }));
 
         Assert.Equal($"Return quantity exceeds quantity sold for product {productId}.", exception.Message);
+        returns.Verify(repository => repository.GetReturnedQuantityAsync(
+            orderId, productId, It.IsAny<CancellationToken>(), true), Times.Once);
         returns.Verify(repository => repository.AddAsync(It.IsAny<SalesReturn>(), It.IsAny<CancellationToken>()), Times.Never);
         inventory.VerifyNoOtherCalls();
         payments.VerifyNoOtherCalls();
