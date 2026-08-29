@@ -21,9 +21,24 @@ public sealed class SalesReturnRepository : ISalesReturnRepository
         return salesReturn;
     }
 
-    public Task<int> GetReturnedQuantityAsync(Guid orderId, Guid productId, CancellationToken cancellationToken = default)
+    public async Task<int> GetReturnedQuantityAsync(
+        Guid orderId,
+        Guid productId,
+        CancellationToken cancellationToken = default,
+        bool serialize = false)
     {
-        return _context.SalesReturnLines
+        if (serialize)
+        {
+            if (_context.Database.CurrentTransaction is null)
+                throw new InvalidOperationException("Serialized return checks require an active transaction.");
+
+            var lockKey = $"return:{orderId:N}:{productId:N}";
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0));",
+                cancellationToken);
+        }
+
+        return await _context.SalesReturnLines
             .Where(x => x.ProductId == productId)
             .Where(x => _context.SalesReturns.Any(r => r.Id == x.SalesReturnId && r.OrderId == orderId))
             .SumAsync(x => x.Quantity, cancellationToken);
