@@ -58,10 +58,48 @@ jobs:
       - name: Build backend
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
-      - name: Run POS runtime smoke test
+      - name: Run POS Docker runtime smoke test
         env:
-          MERCATO_POS_SMOKE_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_pos_smoke;Username=postgres;Password=postgres
-        run: bash backend/pos-runtime-smoke.sh
+          MERCATO_POS_BASE_URL: http://127.0.0.1:5081
+        run: |
+          set -euo pipefail
+          PG_CONTAINER="$(docker ps --filter "ancestor=postgres:16" --format '{{.ID}}' | head -n 1)"
+          test -n "$PG_CONTAINER"
+          NETWORK="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$PG_CONTAINER")"
+          test -n "$NETWORK"
+
+          docker build -t mercato-api-pos-smoke:ci backend
+          docker run -d \
+            --name mercato-pos-smoke-api \
+            --network "$NETWORK" \
+            -p 5081:8080 \
+            -e ASPNETCORE_ENVIRONMENT=Development \
+            -e ASPNETCORE_URLS=http://+:8080 \
+            -e 'MERCATO_CONNECTION_STRING=Host=postgres;Port=5432;Database=mercato_pos_smoke;Username=postgres;Password=postgres' \
+            -e Jwt__Issuer=Mercato.Api \
+            -e Jwt__Audience=Mercato.Client \
+            -e Jwt__Key=Mercato-POS-Smoke-JWT-Key-Change-Me-2026 \
+            -e BootstrapAdmin__Email=admin@mercato.local \
+            -e 'BootstrapAdmin__Password=MercatoLocal123!' \
+            -e BootstrapDemoData__Enabled=true \
+            mercato-api-pos-smoke:ci
+
+          cleanup() {
+            status=$?
+            if [[ $status -ne 0 ]]; then
+              docker logs mercato-pos-smoke-api >&2 || true
+            fi
+            docker rm -f mercato-pos-smoke-api >/dev/null 2>&1 || true
+            exit $status
+          }
+          trap cleanup EXIT
+
+          bash backend/pos-http-smoke.sh
+          if docker logs mercato-pos-smoke-api 2>&1 | grep -Eiq 'Unhandled exception|crit:'; then
+            echo "Mercato POS Docker runtime log contains an unexpected failure." >&2
+            docker logs mercato-pos-smoke-api >&2 || true
+            exit 1
+          fi
 
       - name: Test backend
         env:
