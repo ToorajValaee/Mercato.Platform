@@ -56,10 +56,12 @@ jobs:
           test -n "$PG_CONTAINER"
           docker exec "$PG_CONTAINER" psql -U postgres -d nopcommerce -v ON_ERROR_STOP=1 \
             -c 'CREATE EXTENSION IF NOT EXISTS citext;'
-          docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-            -c 'DROP DATABASE IF EXISTS mercato_test;'
-          docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-            -c 'CREATE DATABASE mercato_test;'
+          for db in mercato_test mercato_pos_smoke; do
+            docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+              -c "DROP DATABASE IF EXISTS ${db};"
+            docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+              -c "CREATE DATABASE ${db};"
+          done
 
       - name: Restore backend
         run: dotnet restore backend/Mercato.Platform.sln
@@ -72,6 +74,13 @@ jobs:
           MERCATO_TEST_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_test;Username=postgres;Password=postgres
         run: dotnet test backend/Mercato.Platform.sln --configuration Release --no-build
 
+      - name: Run POS runtime smoke test
+        env:
+          MERCATO_POS_SMOKE_DB_CONNECTION: Host=127.0.0.1;Port=55432;Database=mercato_pos_smoke;Username=postgres;Password=postgres
+        run: bash backend/pos-runtime-smoke.sh
+
+      # nopCommerce remains in CI for regression safety, but current development is intentionally
+      # gated on Core/POS acceptance before any further nop feature work.
       - name: Build nopCommerce integration cores
         run: |
           dotnet build integrations/nopCommerce/Mercato.Connector.Plugin/Mercato.Connector.Plugin.csproj --configuration Release
