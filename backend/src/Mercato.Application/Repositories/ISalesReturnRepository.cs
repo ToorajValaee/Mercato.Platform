@@ -5,5 +5,9 @@ namespace Mercato.Application.Repositories;
 public interface ISalesReturnRepository
 {
     Task<SalesReturn> AddAsync(SalesReturn salesReturn, CancellationToken cancellationToken = default);
-    Task<int> GetReturnedQuantityAsync(Guid orderId, Guid productId, CancellationToken cancellationToken = default);
+    Task<int> GetReturnedQuantityAsync(
+        Guid orderId,
+        Guid productId,
+        bool serialize = false,
+        CancellationToken cancellationToken = default);
 }
