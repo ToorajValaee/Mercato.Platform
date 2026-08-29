@@ -1,5 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Mercato.Application.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Mercato.Api.Controllers;
 
@@ -8,10 +12,12 @@ namespace Mercato.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IConfiguration configuration)
     {
         _authService = authService;
+        _configuration = configuration;
     }
 
     [HttpPost("register")]
@@ -39,13 +45,48 @@ public class AuthController : ControllerBase
 
         try
         {
-            var token = await _authService.LoginAsync(request.Email, request.Password, cancellationToken);
-            return Ok(new { token });
+            var user = await _authService.LoginAsync(request.Email, request.Password, cancellationToken);
+            var token = CreateToken(user);
+            return Ok(new
+            {
+                token,
+                user = new { user.Id, user.Email, user.Role }
+            });
         }
         catch (UnauthorizedAccessException)
         {
             return Unauthorized();
         }
+    }
+
+    private string CreateToken(AuthenticatedUser user)
+    {
+        var jwt = _configuration.GetSection("Jwt");
+        var issuer = jwt["Issuer"] ?? throw new InvalidOperationException("JWT issuer is not configured.");
+        var audience = jwt["Audience"] ?? throw new InvalidOperationException("JWT audience is not configured.");
+        var key = jwt["Key"] ?? throw new InvalidOperationException("JWT signing key is not configured.");
+        if (key.Length < 32)
+            throw new InvalidOperationException("JWT signing key must be at least 32 characters.");
+
+        var claims = new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString("D")),
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString("D")),
+            new Claim(ClaimTypes.Name, user.Email),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Role, user.Role)
+        };
+        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+        var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer,
+            audience,
+            claims,
+            notBefore: DateTime.UtcNow,
+            expires: DateTime.UtcNow.AddHours(12),
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     public record LoginRequest(string Email, string Password);
