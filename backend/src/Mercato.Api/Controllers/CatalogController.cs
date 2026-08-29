@@ -18,5 +18,14 @@ public sealed class CatalogController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] Guid? branchId, CancellationToken cancellationToken)
-        => Ok(await _catalog.GetCatalogAsync(branchId, cancellationToken));
+    {
+        try
+        {
+            return Ok(await _catalog.GetCatalogAsync(branchId, cancellationToken));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
 }
