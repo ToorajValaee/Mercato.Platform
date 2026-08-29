@@ -35,8 +35,8 @@ public sealed class InventoryWorkflowTests
         var available = await service.GetAvailableQuantityAsync(productId, branchId);
 
         Assert.Equal(8, available);
-        Assert.Equal(8, movements.Sum(x => x.Quantity));
-        Assert.Equal(new[] { 10, -3, 1 }, movements.OrderBy(x => x.CreatedAtUtc).Select(x => x.Quantity).ToArray());
+        Assert.Equal(8m, movements.Sum(x => x.Quantity));
+        Assert.Equal(new[] { 10m, -3m, 1m }, movements.OrderBy(x => x.CreatedAtUtc).Select(x => x.Quantity).ToArray());
     }
 
     [Fact]
@@ -80,9 +80,9 @@ public sealed class InventoryWorkflowTests
 
         Assert.Equal(6, source);
         Assert.Equal(4, destination);
-        Assert.Equal(0, transferMovements.Sum(x => x.Quantity));
-        Assert.Contains(transferMovements, x => x.BranchId == sourceId && x.Quantity == -4 && x.Type == "Transfer-Out");
-        Assert.Contains(transferMovements, x => x.BranchId == destinationId && x.Quantity == 4 && x.Type == "Transfer-In");
+        Assert.Equal(0m, transferMovements.Sum(x => x.Quantity));
+        Assert.Contains(transferMovements, x => x.BranchId == sourceId && x.Quantity == -4m && x.Type == "Transfer-Out");
+        Assert.Contains(transferMovements, x => x.BranchId == destinationId && x.Quantity == 4m && x.Type == "Transfer-In");
     }
 
     private static InventoryServiceImplementation CreateInventoryService(MercatoDbContext context)
