@@ -39,6 +39,33 @@ public sealed class ReturnServiceImplementation : IReturnService
         _unitOfWork = unitOfWork;
     }
 
+    public async Task<ReturnableOrderDto?> GetReturnableOrderAsync(Guid orderId, CancellationToken cancellationToken = default)
+    {
+        if (orderId == Guid.Empty)
+            return null;
+
+        var order = await _orders.GetAsync(orderId, cancellationToken);
+        if (order is null)
+            return null;
+
+        var lines = new List<ReturnableOrderLineDto>();
+        foreach (var group in order.Items.GroupBy(item => item.ProductId).OrderBy(group => group.Key))
+        {
+            var soldQuantity = group.Sum(item => item.Quantity);
+            var returnedQuantity = await _returns.GetReturnedQuantityAsync(order.Id, group.Key, cancellationToken);
+            var unitPrice = group.First().UnitPrice;
+            lines.Add(new ReturnableOrderLineDto(
+                group.Key,
+                soldQuantity,
+                returnedQuantity,
+                Math.Max(0, soldQuantity - returnedQuantity),
+                unitPrice,
+                soldQuantity * unitPrice));
+        }
+
+        return new ReturnableOrderDto(order.Id, order.BranchId, order.CreatedAtUtc, order.TotalAmount, lines);
+    }
+
     public Task<ReturnResult> ReturnAsync(ReturnRequest request, CancellationToken cancellationToken = default)
     {
         if (request.OrderId == Guid.Empty)
