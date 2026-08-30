@@ -39,8 +39,28 @@ public sealed class UserRepository : IUserRepository
     {
         var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (user is null) return false;
+        var assignments = _context.UserBranchAssignments.Where(x => x.UserId == id);
+        _context.UserBranchAssignments.RemoveRange(assignments);
         _context.Users.Remove(user);
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetBranchIdsAsync(Guid userId, CancellationToken cancellationToken = default)
+        => await _context.UserBranchAssignments.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .OrderBy(x => x.BranchId)
+            .Select(x => x.BranchId)
+            .ToListAsync(cancellationToken);
+
+    public async Task SetBranchIdsAsync(Guid userId, IReadOnlyCollection<Guid> branchIds, CancellationToken cancellationToken = default)
+    {
+        var existing = await _context.UserBranchAssignments
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken);
+        _context.UserBranchAssignments.RemoveRange(existing);
+        foreach (var branchId in branchIds.Distinct())
+            _context.UserBranchAssignments.Add(new UserBranchAssignment { UserId = userId, BranchId = branchId });
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }
