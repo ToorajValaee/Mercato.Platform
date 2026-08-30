@@ -37,6 +37,11 @@ public class MercatoDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // System.Object is not a persistence entity. Ignore it before applying any
+        // configuration/conventions so an untyped CLR member can never be promoted
+        // into an EF entity during model discovery.
+        modelBuilder.Ignore<object>();
+
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
         modelBuilder.ApplyConfiguration(new CategoryConfiguration());
         modelBuilder.ApplyConfiguration(new ArtistConfiguration());
