@@ -4,6 +4,7 @@ public record ProductDto(
     Guid Id,
     string Name,
     string? Sku,
+    string? ImageUrl,
     decimal PurchasePrice,
     decimal SalePrice,
     Guid? CategoryId,
