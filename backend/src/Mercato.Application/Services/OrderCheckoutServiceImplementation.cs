@@ -52,6 +52,37 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
         _unitOfWork = unitOfWork;
     }
 
+    // Compatibility overload for existing application tests and integrations that predate
+    // Admin-managed payment methods/discounts. Production DI uses the full constructor above.
+    public OrderCheckoutServiceImplementation(
+        IOrderService orders,
+        IInvoiceService invoices,
+        IInventoryService inventory,
+        IProductRepository products,
+        IBranchRepository branches,
+        ICustomerRepository customers,
+        ISettlementService settlements,
+        IPaymentRepository payments,
+        IAccountingTransactionRepository accountingTransactions,
+        ICheckoutIdempotencyRepository idempotency,
+        IUnitOfWork unitOfWork)
+        : this(
+            orders,
+            invoices,
+            inventory,
+            products,
+            branches,
+            customers,
+            settlements,
+            payments,
+            new LegacyPaymentMethodRepository(),
+            new LegacyDiscountRepository(),
+            accountingTransactions,
+            idempotency,
+            unitOfWork)
+    {
+    }
+
     public async Task<CheckoutResult> CheckoutAsync(
         CheckoutRequest request,
         CancellationToken cancellationToken = default)
@@ -288,4 +319,31 @@ public sealed class OrderCheckoutServiceImplementation : IOrderCheckoutService
     private static CheckoutResult DeserializeResult(CheckoutIdempotencyRecord record)
         => JsonSerializer.Deserialize<CheckoutResult>(record.ResponseJson)
             ?? throw new InvalidOperationException("Stored checkout idempotency result is invalid.");
+
+    private sealed class LegacyPaymentMethodRepository : IPaymentMethodRepository
+    {
+        public Task<IReadOnlyList<PaymentMethod>> GetAllAsync(bool activeOnly = false, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<PaymentMethod>>(new[]
+            {
+                new PaymentMethod { Id = Guid.Parse("30000000-0000-0000-0000-000000000001"), Name = "Cash", IsActive = true },
+                new PaymentMethod { Id = Guid.Parse("30000000-0000-0000-0000-000000000002"), Name = "Card", IsActive = true }
+            });
+
+        public async Task<PaymentMethod?> GetAsync(Guid id, CancellationToken cancellationToken = default)
+            => (await GetAllAsync(true, cancellationToken)).FirstOrDefault(x => x.Id == id);
+
+        public Task<PaymentMethod> AddAsync(PaymentMethod method, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PaymentMethod?> UpdateAsync(PaymentMethod method, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class LegacyDiscountRepository : IDiscountRepository
+    {
+        public Task<IReadOnlyList<DiscountDefinition>> GetAllAsync(bool activeOnly = false, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DiscountDefinition>>(Array.Empty<DiscountDefinition>());
+        public Task<DiscountDefinition?> GetAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult<DiscountDefinition?>(null);
+        public Task<DiscountDefinition> AddAsync(DiscountDefinition discount, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscountDefinition?> UpdateAsync(DiscountDefinition discount, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
 }
