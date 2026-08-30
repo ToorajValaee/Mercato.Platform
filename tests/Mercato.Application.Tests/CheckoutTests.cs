@@ -188,7 +188,7 @@ public class CheckoutTests
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.CheckoutAsync(request));
 
-        Assert.Equal($"Insufficient stock for product {productId}.", exception.Message);
+        Assert.Equal("Insufficient stock for product Test product.", exception.Message);
         fixture.Inventory.Verify(
             service => service.GetAvailableQuantityAsync(productId, branchId, It.IsAny<CancellationToken>()),
             Times.Once);
