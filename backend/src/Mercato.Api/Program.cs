@@ -107,6 +107,5 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "Mercato.Api" }));
-app.MapGet("/", () => Results.Redirect("/pos/"));
 app.MapControllers();
 app.Run();
