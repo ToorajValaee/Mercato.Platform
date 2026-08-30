@@ -13,10 +13,12 @@ CATALOG_AFTER_RETURN="$WORK_DIR/catalog-after-return.json"
 CHECKOUT_JSON="$WORK_DIR/checkout.json"
 RETURN_JSON="$WORK_DIR/return.json"
 POS_HTML="$WORK_DIR/pos.html"
+ADMIN_HTML="$WORK_DIR/admin.html"
+HOME_HTML="$WORK_DIR/home.html"
 
 mkdir -p "$WORK_DIR"
 rm -f "$LOGIN_JSON" "$BRANCHES_JSON" "$CATALOG_BEFORE" "$CATALOG_AFTER_SALE" \
-  "$CATALOG_AFTER_RETURN" "$CHECKOUT_JSON" "$RETURN_JSON" "$POS_HTML"
+  "$CATALOG_AFTER_RETURN" "$CHECKOUT_JSON" "$RETURN_JSON" "$POS_HTML" "$ADMIN_HTML" "$HOME_HTML"
 
 for _ in {1..90}; do
   if curl -fsS --max-time 3 "$BASE_URL/health" >/dev/null 2>&1; then
@@ -26,8 +28,18 @@ for _ in {1..90}; do
 done
 curl -fsS --max-time 10 "$BASE_URL/health" >/dev/null
 
+curl -fsS "$BASE_URL/" -o "$HOME_HTML"
+grep -q '<title>Mercato</title>' "$HOME_HTML"
+grep -q '/admin/' "$HOME_HTML"
+grep -q '/pos/' "$HOME_HTML"
+
 curl -fsS "$BASE_URL/pos/" -o "$POS_HTML"
 grep -q '<title>Mercato POS</title>' "$POS_HTML"
+
+curl -fsS "$BASE_URL/admin/" -o "$ADMIN_HTML"
+grep -q '<title>Mercato Back Office</title>' "$ADMIN_HTML"
+grep -q 'Artist settlements' "$ADMIN_HTML"
+grep -q 'Staff accounts' "$ADMIN_HTML"
 
 curl -fsS \
   -H 'Content-Type: application/json' \
@@ -44,6 +56,30 @@ print(data['token'])
 PY
 )"
 AUTH=(-H "Authorization: Bearer $TOKEN")
+
+# Back-office staff administration must be a real Admin-only workflow, not a static screen.
+STAFF_EMAIL="runtime-cashier-${RANDOM}@mercato.local"
+STAFF_JSON="$WORK_DIR/staff.json"
+curl -fsS "${AUTH[@]}" "$BASE_URL/api/staff" -o "$WORK_DIR/staff-before.json"
+curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$STAFF_EMAIL\",\"password\":\"RuntimeCashier123!\",\"role\":\"Cashier\"}" \
+  "$BASE_URL/api/staff" -o "$STAFF_JSON"
+STAFF_ID="$(python3 - "$STAFF_JSON" "$STAFF_EMAIL" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as f: data=json.load(f)
+assert data['email'] == sys.argv[2], data
+assert data['role'] == 'Cashier', data
+print(data['id'])
+PY
+)"
+curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -X PUT \
+  -d '{"role":"Manager","password":null}' "$BASE_URL/api/staff/$STAFF_ID" -o "$WORK_DIR/staff-updated.json"
+python3 - "$WORK_DIR/staff-updated.json" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as f: data=json.load(f)
+assert data['role'] == 'Manager', data
+PY
+curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/staff/$STAFF_ID" >/dev/null
 
 curl -fsS "${AUTH[@]}" "$BASE_URL/api/branches" -o "$BRANCHES_JSON"
 BRANCH_ID="$(python3 - "$BRANCHES_JSON" <<'PY'
@@ -148,4 +184,4 @@ p=next(x for x in data if x['productId'] == sys.argv[2])
 assert p['availableQuantity'] == int(sys.argv[3]) - 1, p
 PY
 
-echo "Mercato POS HTTP smoke passed: UI, JWT login, branch catalog, sale, idempotent replay, partial return, and stock reconciliation."
+echo "Mercato runtime smoke passed: landing page, back office, staff lifecycle, POS, JWT login, sale, idempotent replay, partial return, and stock reconciliation."
