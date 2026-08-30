@@ -23,12 +23,12 @@ public sealed class InvoiceRepository : IInvoiceRepository
 
     public Task<Invoice?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return _context.Invoices.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        return _context.Invoices.AsNoTracking().Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
     public Task<Invoice?> GetByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default)
     {
-        return _context.Invoices.AsNoTracking().FirstOrDefaultAsync(x => x.OrderId == orderId, cancellationToken);
+        return _context.Invoices.AsNoTracking().Include(x => x.Items).FirstOrDefaultAsync(x => x.OrderId == orderId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<Invoice>> GetAllAsync(Guid? branchId = null, Guid? customerId = null, CancellationToken cancellationToken = default)
