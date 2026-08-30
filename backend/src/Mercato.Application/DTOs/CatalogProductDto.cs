@@ -4,6 +4,7 @@ public sealed record CatalogProductDto(
     Guid ProductId,
     string Name,
     string? Sku,
+    string? ImageUrl,
     decimal SalePrice,
     Guid? CategoryId,
     Guid? ArtistId,
