@@ -1,4 +1,5 @@
 using System.Text;
+using Mercato.Api.Services;
 using Mercato.Application;
 using Mercato.Application.Services;
 using Mercato.Domain.Entities;
@@ -11,6 +12,8 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<CurrentUserBranchAccess>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -35,11 +38,8 @@ builder.Services
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AdminOnly", policy =>
-        policy.RequireRole("Admin"));
-
-    options.AddPolicy("UserAccess", policy =>
-        policy.RequireRole("User", "Admin"));
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("UserAccess", policy => policy.RequireRole("User", "Admin"));
 });
 
 var app = builder.Build();
@@ -86,21 +86,12 @@ using (var scope = app.Services.CreateScope())
             new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000004"), Name = "Art Print", Sku = "DEMO-PRINT", PurchasePrice = 8m, SalePrice = 24m }
         };
 
-        dbContext.Branches.Add(new Branch
-        {
-            Id = branchId,
-            Name = "Demo Store",
-            Address = "Local POS demo"
-        });
+        dbContext.Branches.Add(new Branch { Id = branchId, Name = "Demo Store", Address = "Local POS demo" });
         dbContext.Products.AddRange(products);
         dbContext.StockMovements.AddRange(products.Select((product, index) => new StockMovement
         {
-            Id = Guid.NewGuid(),
-            BranchId = branchId,
-            ProductId = product.Id,
-            Quantity = 12 + index * 3,
-            Type = "Demo opening stock",
-            CreatedAtUtc = DateTime.UtcNow
+            Id = Guid.NewGuid(), BranchId = branchId, ProductId = product.Id,
+            Quantity = 12 + index * 3, Type = "Demo opening stock", CreatedAtUtc = DateTime.UtcNow
         }));
         await dbContext.SaveChangesAsync();
     }
