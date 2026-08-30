@@ -1,6 +1,6 @@
-# Mercato POS Acceptance
+# Mercato Core, Back Office and POS Acceptance
 
-This is the current acceptance boundary before further nopCommerce development. The goal is to evaluate Mercato Core, inventory, sale, receipt, and return behavior directly through the POS.
+This is the current acceptance boundary before further nopCommerce development. The goal is to evaluate Mercato Core, back-office operations, inventory, sale, receipt, and return behavior directly without nopCommerce.
 
 ## Fast local start
 
@@ -10,10 +10,17 @@ From the repository root:
 docker compose up --build
 ```
 
-Open:
+Open the workspace launcher:
 
 ```text
-http://localhost:8080/pos/
+http://localhost:8080/
+```
+
+Direct workspaces:
+
+```text
+Back Office: http://localhost:8080/admin/
+POS:         http://localhost:8080/pos/
 ```
 
 The development Compose profile defaults to:
@@ -34,7 +41,7 @@ docker compose up --build
 
 ## Demo data
 
-The local Compose stack enables `BootstrapDemoData__Enabled=true`. On an empty database it creates one `Demo Store` branch, four generic products, and opening stock so the POS can be evaluated immediately.
+The local Compose stack enables `BootstrapDemoData__Enabled=true`. On an empty database it creates one `Demo Store` branch, four generic products, and opening stock so the POS and inventory screens can be evaluated immediately.
 
 Demo bootstrap only runs when both branch and product tables are empty. It does not overwrite existing business data.
 
@@ -51,7 +58,26 @@ docker compose down -v
 docker compose up --build
 ```
 
-## Acceptance flow
+## Back Office acceptance
+
+Sign in at `/admin/`. The role-aware Back Office exposes the implemented Mercato management surface:
+
+1. Dashboard counts and quick navigation.
+2. Products: create/edit/archive name, SKU, sale price, purchase cost, category and artist.
+3. Categories: create/edit hierarchy and Admin deletion.
+4. Artists: create/edit identity and Admin deletion.
+5. Branches: create/edit and Admin deletion subject to backend constraints.
+6. Customers: create/update contact records.
+7. Inventory: branch availability, whole-unit adjustments, branch transfers and movement history.
+8. Invoices: branch/customer filtering and invoice detail.
+9. Order lookup: inspect a Mercato order and returnable quantities.
+10. Artist settlements: calculate purchase-cost settlements, filter state and mark paid.
+11. Accounting: filter operational transaction history and summary reporting.
+12. Staff: Admin-only list/create/edit-role/reset-password/delete for Admin, Manager and Cashier accounts. Self-delete and self-demotion from Admin are blocked.
+
+Cashier accounts do not receive Manager/Admin mutation and finance navigation. Manager accounts receive operational and finance functions but not staff administration. Admin receives the complete Back Office surface.
+
+## POS acceptance flow
 
 1. Sign in as Admin, Manager, or Cashier.
 2. Confirm the branch selector loads the available branch.
@@ -80,10 +106,11 @@ docker compose up --build
 - A downstream failure rolls the entire sale/return transaction back.
 - Inventory is whole-unit and ledger-backed; ledger movement sums reconcile to available stock.
 - Branch transfers are balanced source/destination movements.
+- Staff roles are enforced server-side; hiding a browser control is not the authorization mechanism.
 
 ## Intentionally unresolved policy
 
-The current POS does not invent business rules that have not been specified. The following remain product-policy decisions rather than implementation defects:
+The current application does not invent business rules that have not been specified. The following remain product-policy decisions rather than implementation defects:
 
 - final allowed payment methods and provider-specific fields;
 - taxes and jurisdiction-specific calculation/posting;
@@ -96,16 +123,22 @@ The generic payment/refund method field exists so the Core workflow can be evalu
 
 ## Automated acceptance
 
-CI runs `backend/pos-runtime-smoke.sh` before nopCommerce integration steps. It proves against PostgreSQL that:
+Core/POS CI builds and runs the real Mercato Docker image against PostgreSQL, then executes `backend/pos-http-smoke.sh`. It proves that:
 
-- `/pos/` is served;
+- `/` serves the workspace launcher;
+- `/admin/` serves the Back Office;
+- `/pos/` serves the POS;
 - bootstrap Admin login returns a role-bearing JWT;
+- Admin staff list/create/change-role/delete works through the live API;
 - authorized branches and branch catalog load;
 - a sale completes;
 - replaying the same checkout idempotency key returns the same order/invoice/payment;
 - branch stock decreases exactly once;
 - the order reports remaining returnable quantity;
 - a partial return completes;
-- branch stock is restored by exactly the returned quantity.
+- branch stock is restored by exactly the returned quantity;
+- the full backend test suite passes after runtime acceptance.
 
-Further nopCommerce feature development is intentionally paused until the POS is accepted.
+Run `33282781177` completed successfully with build, production-like Docker/PostgreSQL runtime acceptance, Back Office/staff lifecycle, POS sale/return workflow, and backend tests all green.
+
+Further nopCommerce feature development is intentionally paused until this Core/Back Office/POS surface is accepted by the user.
