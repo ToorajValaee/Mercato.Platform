@@ -32,11 +32,13 @@ public sealed class ProductServiceImplementation : IProductService
             Guid.NewGuid(),
             request.Name.Trim(),
             Normalize(request.Sku),
-            Normalize(request.ImageUrl),
             request.PurchasePrice,
             request.SalePrice,
             request.CategoryId,
-            request.ArtistId);
+            request.ArtistId)
+        {
+            ImageUrl = Normalize(request.ImageUrl)
+        };
         return await _products.AddAsync(product, cancellationToken);
     }
 
