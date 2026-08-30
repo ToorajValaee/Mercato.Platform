@@ -27,6 +27,7 @@ public class MercatoDbContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<BranchInventoryDebt> BranchInventoryDebts => Set<BranchInventoryDebt>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,10 +49,16 @@ public class MercatoDbContext : DbContext
         modelBuilder.ApplyConfiguration(new OrderConfiguration());
         modelBuilder.ApplyConfiguration(new OrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new BranchInventoryDebtConfiguration());
-        base.OnModelCreating(modelBuilder);
 
-        // System.Object is never a Mercato persistence entity. Apply this after all explicit
-        // configurations so an accidental untyped navigation cannot reintroduce it later.
+        modelBuilder.Entity<UserBranchAssignment>(entity =>
+        {
+            entity.HasKey(x => new { x.UserId, x.BranchId });
+            entity.HasIndex(x => x.BranchId);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        base.OnModelCreating(modelBuilder);
         modelBuilder.Ignore<object>();
     }
 }
