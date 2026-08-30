@@ -18,11 +18,13 @@ public sealed class StaffController : ControllerBase
     };
 
     private readonly IUserRepository _users;
+    private readonly IBranchRepository _branches;
     private readonly PasswordService _passwords;
 
-    public StaffController(IUserRepository users, PasswordService passwords)
+    public StaffController(IUserRepository users, IBranchRepository branches, PasswordService passwords)
     {
         _users = users;
+        _branches = branches;
         _passwords = passwords;
     }
 
@@ -30,7 +32,10 @@ public sealed class StaffController : ControllerBase
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var users = await _users.GetAllAsync(cancellationToken);
-        return Ok(users.Select(ToDto));
+        var result = new List<object>(users.Count);
+        foreach (var user in users)
+            result.Add(await ToDtoAsync(user, cancellationToken));
+        return Ok(result);
     }
 
     [HttpPost]
@@ -45,6 +50,9 @@ public sealed class StaffController : ControllerBase
         if (await _users.GetByEmailAsync(email, cancellationToken) is not null)
             return Conflict(new { error = "Email already exists." });
 
+        var branchIds = await ValidateBranchIdsAsync(request.BranchIds, cancellationToken);
+        if (branchIds is null) return BadRequest(new { error = "One or more selected branches do not exist." });
+
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -53,7 +61,8 @@ public sealed class StaffController : ControllerBase
             Role = role
         };
         await _users.AddAsync(user, cancellationToken);
-        return Ok(ToDto(user));
+        await _users.SetBranchIdsAsync(user.Id, branchIds, cancellationToken);
+        return Ok(await ToDtoAsync(user, cancellationToken));
     }
 
     [HttpPut("{id:guid}")]
@@ -69,6 +78,9 @@ public sealed class StaffController : ControllerBase
         if (Guid.TryParse(currentUserId, out var currentId) && currentId == id && role != "Admin")
             return BadRequest(new { error = "You cannot remove your own Admin role." });
 
+        var branchIds = await ValidateBranchIdsAsync(request.BranchIds, cancellationToken);
+        if (branchIds is null) return BadRequest(new { error = "One or more selected branches do not exist." });
+
         user.Role = role;
         if (!string.IsNullOrWhiteSpace(request.Password))
         {
@@ -78,7 +90,8 @@ public sealed class StaffController : ControllerBase
         }
 
         await _users.UpdateAsync(user, cancellationToken);
-        return Ok(ToDto(user));
+        await _users.SetBranchIdsAsync(user.Id, branchIds, cancellationToken);
+        return Ok(await ToDtoAsync(user, cancellationToken));
     }
 
     [HttpDelete("{id:guid}")]
@@ -91,7 +104,17 @@ public sealed class StaffController : ControllerBase
         return await _users.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
     }
 
-    private static object ToDto(User user) => new { user.Id, user.Email, user.Role };
+    private async Task<object> ToDtoAsync(User user, CancellationToken cancellationToken)
+        => new { user.Id, user.Email, user.Role, BranchIds = await _users.GetBranchIdsAsync(user.Id, cancellationToken) };
+
+    private async Task<IReadOnlyList<Guid>?> ValidateBranchIdsAsync(IReadOnlyCollection<Guid>? values, CancellationToken cancellationToken)
+    {
+        var ids = (values ?? Array.Empty<Guid>()).Where(x => x != Guid.Empty).Distinct().ToArray();
+        foreach (var id in ids)
+            if (await _branches.GetAsync(id, cancellationToken) is null)
+                return null;
+        return ids;
+    }
 
     private static bool TryNormalizeRole(string? value, out string role)
     {
@@ -101,6 +124,6 @@ public sealed class StaffController : ControllerBase
         return true;
     }
 
-    public sealed record CreateStaffRequest(string Email, string Password, string Role);
-    public sealed record UpdateStaffRequest(string Role, string? Password);
+    public sealed record CreateStaffRequest(string Email, string Password, string Role, IReadOnlyCollection<Guid>? BranchIds = null);
+    public sealed record UpdateStaffRequest(string Role, string? Password, IReadOnlyCollection<Guid>? BranchIds = null);
 }
