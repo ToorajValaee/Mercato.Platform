@@ -1,6 +1,7 @@
 using Mercato.Application.Repositories;
 using Mercato.Domain.Entities;
 using Mercato.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Mercato.Infrastructure.Repositories;
 
@@ -19,4 +20,10 @@ public sealed class PaymentRepository : IPaymentRepository
         await _context.SaveChangesAsync(cancellationToken);
         return payment;
     }
+
+    public Task<Payment?> GetSalePaymentByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default)
+        => _context.Payments.AsNoTracking()
+            .Where(x => x.OrderId == orderId && x.Type == "Payment")
+            .OrderBy(x => x.PaidAt)
+            .FirstOrDefaultAsync(cancellationToken);
 }
