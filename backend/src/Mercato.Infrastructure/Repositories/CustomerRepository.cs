@@ -20,6 +20,12 @@ public sealed class CustomerRepository : ICustomerRepository
     public Task<Customer?> GetAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
+    public Task<Customer?> GetByPhoneAsync(string phone, CancellationToken cancellationToken = default)
+    {
+        var normalized = phone.Trim();
+        return _context.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Phone == normalized, cancellationToken);
+    }
+
     public Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.Customers.AnyAsync(x => x.Id == id, cancellationToken);
 
