@@ -5,7 +5,12 @@ public sealed record ReturnableOrderDto(
     Guid BranchId,
     DateTime CreatedAtUtc,
     decimal TotalAmount,
-    IReadOnlyList<ReturnableOrderLineDto> Items);
+    IReadOnlyList<ReturnableOrderLineDto> Items)
+{
+    public decimal SubtotalAmount { get; init; }
+    public string? DiscountName { get; init; }
+    public decimal DiscountAmount { get; init; }
+}
 
 public sealed record ReturnableOrderLineDto(
     Guid ProductId,
@@ -15,7 +20,6 @@ public sealed record ReturnableOrderLineDto(
     decimal UnitPrice,
     decimal LineTotal)
 {
-    // Compatibility field consumed by the initial browser POS. It intentionally represents
-    // the quantity that may still be returned, not the original sold quantity.
+    public string ProductName { get; init; } = string.Empty;
     public int Quantity => ReturnableQuantity;
 }
