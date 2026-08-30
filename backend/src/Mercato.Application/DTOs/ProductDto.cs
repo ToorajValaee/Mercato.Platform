@@ -4,8 +4,10 @@ public record ProductDto(
     Guid Id,
     string Name,
     string? Sku,
-    string? ImageUrl,
     decimal PurchasePrice,
     decimal SalePrice,
     Guid? CategoryId,
-    Guid? ArtistId);
+    Guid? ArtistId)
+{
+    public string? ImageUrl { get; init; }
+}
