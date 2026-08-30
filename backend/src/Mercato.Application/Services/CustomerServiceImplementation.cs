@@ -19,27 +19,43 @@ public sealed class CustomerServiceImplementation : ICustomerService
     public Task<Customer?> GetAsync(Guid id, CancellationToken cancellationToken = default)
         => _customers.GetAsync(id, cancellationToken);
 
-    public Task<Customer> CreateAsync(CreateCustomerRequest request, CancellationToken cancellationToken = default)
+    public Task<Customer?> GetByPhoneAsync(string phone, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return Task.FromResult<Customer?>(null);
+        return _customers.GetByPhoneAsync(phone.Trim(), cancellationToken);
+    }
+
+    public async Task<Customer> CreateAsync(CreateCustomerRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request.Name);
-        return _customers.AddAsync(new Customer
+        var phone = Normalize(request.Phone);
+        if (phone is not null && await _customers.GetByPhoneAsync(phone, cancellationToken) is not null)
+            throw new InvalidOperationException("A customer with this mobile number already exists.");
+        return await _customers.AddAsync(new Customer
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
-            Phone = Normalize(request.Phone),
+            Phone = phone,
             Email = Normalize(request.Email)
         }, cancellationToken);
     }
 
-    public Task<Customer?> UpdateAsync(Guid id, UpdateCustomerRequest request, CancellationToken cancellationToken = default)
+    public async Task<Customer?> UpdateAsync(Guid id, UpdateCustomerRequest request, CancellationToken cancellationToken = default)
     {
         if (id == Guid.Empty) throw new ArgumentException("Customer is required.", nameof(id));
         Validate(request.Name);
-        return _customers.UpdateAsync(new Customer
+        var phone = Normalize(request.Phone);
+        if (phone is not null)
+        {
+            var duplicate = await _customers.GetByPhoneAsync(phone, cancellationToken);
+            if (duplicate is not null && duplicate.Id != id)
+                throw new InvalidOperationException("A customer with this mobile number already exists.");
+        }
+        return await _customers.UpdateAsync(new Customer
         {
             Id = id,
             Name = request.Name.Trim(),
-            Phone = Normalize(request.Phone),
+            Phone = phone,
             Email = Normalize(request.Email)
         }, cancellationToken);
     }
