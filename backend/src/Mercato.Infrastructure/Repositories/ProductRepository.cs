@@ -52,7 +52,6 @@ public class ProductRepository : IProductRepository
     {
         var entity = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (entity is null) return null;
-
         entity.Name = request.Name;
         entity.Sku = request.Sku;
         entity.ImageUrl = request.ImageUrl;
@@ -77,9 +76,11 @@ public class ProductRepository : IProductRepository
         product.Id,
         product.Name,
         product.Sku,
-        product.ImageUrl,
         product.PurchasePrice,
         product.SalePrice,
         product.CategoryId,
-        product.ArtistId);
+        product.ArtistId)
+    {
+        ImageUrl = product.ImageUrl
+    };
 }
