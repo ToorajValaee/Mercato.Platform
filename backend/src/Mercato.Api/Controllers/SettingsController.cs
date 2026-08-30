@@ -24,6 +24,7 @@ public sealed class SettingsController : ControllerBase
     }
 
     [HttpGet("public")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetPublic(CancellationToken cancellationToken)
     {
         var settings = await _db.ApplicationSettings.AsNoTracking().ToDictionaryAsync(x => x.Key, x => x.Value, cancellationToken);
@@ -72,16 +73,10 @@ public sealed class SettingsController : ControllerBase
         if (error is not null) return BadRequest(new { error });
         try
         {
-            var created = await _paymentMethods.AddAsync(new PaymentMethod
-            {
-                Id = Guid.NewGuid(), Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder
-            }, cancellationToken);
+            var created = await _paymentMethods.AddAsync(new PaymentMethod { Id = Guid.NewGuid(), Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
             return Ok(created);
         }
-        catch (DbUpdateException)
-        {
-            return Conflict(new { error = "A payment method with this name already exists." });
-        }
+        catch (DbUpdateException) { return Conflict(new { error = "A payment method with this name already exists." }); }
     }
 
     [HttpPut("payment-methods/{id:guid}")]
@@ -92,16 +87,10 @@ public sealed class SettingsController : ControllerBase
         if (error is not null) return BadRequest(new { error });
         try
         {
-            var updated = await _paymentMethods.UpdateAsync(new PaymentMethod
-            {
-                Id = id, Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder
-            }, cancellationToken);
+            var updated = await _paymentMethods.UpdateAsync(new PaymentMethod { Id = id, Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
             return updated is null ? NotFound() : Ok(updated);
         }
-        catch (DbUpdateException)
-        {
-            return Conflict(new { error = "A payment method with this name already exists." });
-        }
+        catch (DbUpdateException) { return Conflict(new { error = "A payment method with this name already exists." }); }
     }
 
     [HttpDelete("payment-methods/{id:guid}")]
@@ -113,42 +102,26 @@ public sealed class SettingsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateDiscount(DiscountRequest request, CancellationToken cancellationToken)
     {
-        var validation = ValidateDiscount(request);
-        if (validation is not null) return BadRequest(new { error = validation });
+        var validation = ValidateDiscount(request); if (validation is not null) return BadRequest(new { error = validation });
         try
         {
-            var created = await _discounts.AddAsync(new DiscountDefinition
-            {
-                Id = Guid.NewGuid(), Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type),
-                Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder
-            }, cancellationToken);
+            var created = await _discounts.AddAsync(new DiscountDefinition { Id = Guid.NewGuid(), Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type), Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
             return Ok(created);
         }
-        catch (DbUpdateException)
-        {
-            return Conflict(new { error = "A discount with this name already exists." });
-        }
+        catch (DbUpdateException) { return Conflict(new { error = "A discount with this name already exists." }); }
     }
 
     [HttpPut("discounts/{id:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateDiscount(Guid id, DiscountRequest request, CancellationToken cancellationToken)
     {
-        var validation = ValidateDiscount(request);
-        if (validation is not null) return BadRequest(new { error = validation });
+        var validation = ValidateDiscount(request); if (validation is not null) return BadRequest(new { error = validation });
         try
         {
-            var updated = await _discounts.UpdateAsync(new DiscountDefinition
-            {
-                Id = id, Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type),
-                Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder
-            }, cancellationToken);
+            var updated = await _discounts.UpdateAsync(new DiscountDefinition { Id = id, Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type), Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
             return updated is null ? NotFound() : Ok(updated);
         }
-        catch (DbUpdateException)
-        {
-            return Conflict(new { error = "A discount with this name already exists." });
-        }
+        catch (DbUpdateException) { return Conflict(new { error = "A discount with this name already exists." }); }
     }
 
     [HttpDelete("discounts/{id:guid}")]
@@ -159,27 +132,18 @@ public sealed class SettingsController : ControllerBase
     private async Task UpsertAsync(string key, string value, CancellationToken cancellationToken)
     {
         var row = await _db.ApplicationSettings.FirstOrDefaultAsync(x => x.Key == key, cancellationToken);
-        if (row is null) _db.ApplicationSettings.Add(new ApplicationSetting { Key = key, Value = value });
-        else row.Value = value;
+        if (row is null) _db.ApplicationSettings.Add(new ApplicationSetting { Key = key, Value = value }); else row.Value = value;
     }
-
-    private static string? ValidateName(string? name)
-        => string.IsNullOrWhiteSpace(name) ? "Name is required." : name.Trim().Length > 100 ? "Name is too long." : null;
-
+    private static string? ValidateName(string? name) => string.IsNullOrWhiteSpace(name) ? "Name is required." : name.Trim().Length > 100 ? "Name is too long." : null;
     private static string? ValidateDiscount(DiscountRequest request)
     {
-        var nameError = ValidateName(request.Name);
-        if (nameError is not null) return nameError;
-        var type = NormalizeDiscountType(request.Type);
-        if (type is not ("Percent" or "Fixed")) return "Discount type must be Percent or Fixed.";
+        var nameError = ValidateName(request.Name); if (nameError is not null) return nameError;
+        var type = NormalizeDiscountType(request.Type); if (type is not ("Percent" or "Fixed")) return "Discount type must be Percent or Fixed.";
         if (request.Value <= 0) return "Discount value must be greater than zero.";
         if (type == "Percent" && request.Value > 100) return "Percent discount cannot exceed 100.";
         return null;
     }
-
-    private static string NormalizeDiscountType(string? type)
-        => type?.Trim().Equals("fixed", StringComparison.OrdinalIgnoreCase) == true ? "Fixed" :
-           type?.Trim().Equals("percent", StringComparison.OrdinalIgnoreCase) == true ? "Percent" : type?.Trim() ?? string.Empty;
+    private static string NormalizeDiscountType(string? type) => type?.Trim().Equals("fixed", StringComparison.OrdinalIgnoreCase) == true ? "Fixed" : type?.Trim().Equals("percent", StringComparison.OrdinalIgnoreCase) == true ? "Percent" : type?.Trim() ?? string.Empty;
 
     public sealed record UpdateApplicationSettingsRequest(string SystemLanguage, bool PosShowProductImages);
     public sealed record PaymentMethodRequest(string Name, bool IsActive, int SortOrder);
