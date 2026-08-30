@@ -37,6 +37,7 @@ public class ProductRepository : IProductRepository
             Id = product.Id,
             Name = product.Name,
             Sku = product.Sku,
+            ImageUrl = product.ImageUrl,
             PurchasePrice = product.PurchasePrice,
             SalePrice = product.SalePrice,
             CategoryId = product.CategoryId,
@@ -54,6 +55,7 @@ public class ProductRepository : IProductRepository
 
         entity.Name = request.Name;
         entity.Sku = request.Sku;
+        entity.ImageUrl = request.ImageUrl;
         entity.PurchasePrice = request.PurchasePrice;
         entity.SalePrice = request.SalePrice;
         entity.CategoryId = request.CategoryId;
@@ -75,6 +77,7 @@ public class ProductRepository : IProductRepository
         product.Id,
         product.Name,
         product.Sku,
+        product.ImageUrl,
         product.PurchasePrice,
         product.SalePrice,
         product.CategoryId,
