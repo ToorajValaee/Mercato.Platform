@@ -112,6 +112,5 @@ public class MercatoDbContext : DbContext
         });
 
         base.OnModelCreating(modelBuilder);
-        modelBuilder.Ignore<object>();
     }
 }
