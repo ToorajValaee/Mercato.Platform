@@ -51,6 +51,7 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
                 product.Id,
                 product.Name,
                 product.Sku,
+                product.ImageUrl,
                 product.SalePrice,
                 product.CategoryId,
                 product.ArtistId,
