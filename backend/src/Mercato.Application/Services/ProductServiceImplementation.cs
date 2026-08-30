@@ -32,6 +32,7 @@ public sealed class ProductServiceImplementation : IProductService
             Guid.NewGuid(),
             request.Name.Trim(),
             Normalize(request.Sku),
+            Normalize(request.ImageUrl),
             request.PurchasePrice,
             request.SalePrice,
             request.CategoryId,
@@ -45,7 +46,8 @@ public sealed class ProductServiceImplementation : IProductService
         return await _products.UpdateAsync(id, request with
         {
             Name = request.Name.Trim(),
-            Sku = Normalize(request.Sku)
+            Sku = Normalize(request.Sku),
+            ImageUrl = Normalize(request.ImageUrl)
         }, cancellationToken);
     }
 
