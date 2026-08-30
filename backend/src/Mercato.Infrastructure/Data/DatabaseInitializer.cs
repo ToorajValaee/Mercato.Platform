@@ -15,15 +15,24 @@ public static class DatabaseInitializer
 
             try
             {
-                // Database creation/migration runs once during application startup. Use the
-                // provider's synchronous connection path here deliberately: on constrained
-                // hosted runners the async DNS worker can fail with SocketError.TryAgain even
-                // for a literal loopback address. Request-time database operations remain async.
                 var migrations = context.Database.GetMigrations();
                 if (migrations.Any())
                     context.Database.Migrate();
                 else
                     context.Database.EnsureCreated();
+
+                // EnsureCreated does not evolve an existing schema. Keep this additive table
+                // bootstrap until the production baseline migration is introduced.
+                context.Database.ExecuteSqlRaw("""
+                    CREATE TABLE IF NOT EXISTS "UserBranchAssignments" (
+                        "UserId" uuid NOT NULL,
+                        "BranchId" uuid NOT NULL,
+                        CONSTRAINT "PK_UserBranchAssignments" PRIMARY KEY ("UserId", "BranchId"),
+                        CONSTRAINT "FK_UserBranchAssignments_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE,
+                        CONSTRAINT "FK_UserBranchAssignments_Branches_BranchId" FOREIGN KEY ("BranchId") REFERENCES "Branches" ("Id") ON DELETE CASCADE
+                    );
+                    CREATE INDEX IF NOT EXISTS "IX_UserBranchAssignments_BranchId" ON "UserBranchAssignments" ("BranchId");
+                    """);
 
                 return;
             }
