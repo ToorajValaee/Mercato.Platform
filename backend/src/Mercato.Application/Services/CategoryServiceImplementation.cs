@@ -51,7 +51,7 @@ public sealed class CategoryServiceImplementation : ICategoryService
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Category name is required.", nameof(name));
-        if (parentId == id)
+        if (id.HasValue && parentId == id.Value)
             throw new ArgumentException("A category cannot be its own parent.", nameof(parentId));
         if (parentId is Guid parent && parent != Guid.Empty && await _categories.GetAsync(parent, cancellationToken) is null)
             throw new InvalidOperationException("Parent category was not found.");
