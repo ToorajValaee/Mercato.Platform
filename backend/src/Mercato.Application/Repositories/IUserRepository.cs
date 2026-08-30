@@ -10,4 +10,6 @@ public interface IUserRepository
     Task AddAsync(User user, CancellationToken cancellationToken = default);
     Task UpdateAsync(User user, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetBranchIdsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task SetBranchIdsAsync(Guid userId, IReadOnlyCollection<Guid> branchIds, CancellationToken cancellationToken = default);
 }
