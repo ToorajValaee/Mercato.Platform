@@ -54,16 +54,25 @@ public sealed class ReturnServiceImplementation : IReturnService
             var soldQuantity = group.Sum(item => item.Quantity);
             var returnedQuantity = await _returns.GetReturnedQuantityAsync(order.Id, group.Key, cancellationToken);
             var unitPrice = group.First().UnitPrice;
+            var product = await _products.GetByIdAsync(group.Key, cancellationToken);
             lines.Add(new ReturnableOrderLineDto(
                 group.Key,
                 soldQuantity,
                 returnedQuantity,
                 Math.Max(0, soldQuantity - returnedQuantity),
                 unitPrice,
-                soldQuantity * unitPrice));
+                soldQuantity * unitPrice)
+            {
+                ProductName = product?.Name ?? group.Key.ToString()
+            });
         }
 
-        return new ReturnableOrderDto(order.Id, order.BranchId, order.CreatedAtUtc, order.TotalAmount, lines);
+        return new ReturnableOrderDto(order.Id, order.BranchId, order.CreatedAtUtc, order.TotalAmount, lines)
+        {
+            SubtotalAmount = order.SubtotalAmount == 0 ? order.TotalAmount : order.SubtotalAmount,
+            DiscountName = order.DiscountName,
+            DiscountAmount = order.DiscountAmount
+        };
     }
 
     public Task<ReturnResult> ReturnAsync(ReturnRequest request, CancellationToken cancellationToken = default)
@@ -107,9 +116,6 @@ public sealed class ReturnServiceImplementation : IReturnService
                 if (sold == 0)
                     throw new InvalidOperationException($"Product {requested.ProductId} was not sold on this order.");
 
-                // Hold an order/product advisory lock until the surrounding transaction commits.
-                // A concurrent return for the same sold line must therefore observe this return
-                // before deciding how much remains returnable.
                 var alreadyReturned = await _returns.GetReturnedQuantityAsync(
                     order.Id,
                     requested.ProductId,
@@ -133,7 +139,11 @@ public sealed class ReturnServiceImplementation : IReturnService
                     settlementReversals.Add((artistId, requested.ProductId, requested.Quantity, product.PurchasePrice));
             }
 
-            var total = returnLines.Sum(x => x.Quantity * x.UnitPrice);
+            var grossReturn = returnLines.Sum(x => x.Quantity * x.UnitPrice);
+            var originalSubtotal = order.SubtotalAmount > 0 ? order.SubtotalAmount : order.TotalAmount;
+            var total = originalSubtotal > 0 && order.TotalAmount < originalSubtotal
+                ? decimal.Round(grossReturn * order.TotalAmount / originalSubtotal, 2, MidpointRounding.AwayFromZero)
+                : grossReturn;
             var createdAtUtc = DateTime.UtcNow;
             var reference = $"RET-{createdAtUtc:yyyyMMdd}-{Guid.NewGuid():N}"[..25];
 
