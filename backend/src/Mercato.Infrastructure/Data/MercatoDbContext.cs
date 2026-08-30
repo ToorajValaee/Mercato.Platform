@@ -13,6 +13,7 @@ public class MercatoDbContext : DbContext
     public DbSet<Artist> Artists => Set<Artist>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<BranchTransfer> BranchTransfers => Set<BranchTransfer>();
     public DbSet<SettlementLine> SettlementLines => Set<SettlementLine>();
@@ -28,6 +29,11 @@ public class MercatoDbContext : DbContext
     public DbSet<BranchInventoryDebt> BranchInventoryDebts => Set<BranchInventoryDebt>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
+    public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
+    public DbSet<DiscountDefinition> DiscountDefinitions => Set<DiscountDefinition>();
+    public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
+    public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
+    public DbSet<GoodsReceiptLine> GoodsReceiptLines => Set<GoodsReceiptLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,12 +56,59 @@ public class MercatoDbContext : DbContext
         modelBuilder.ApplyConfiguration(new OrderItemConfiguration());
         modelBuilder.ApplyConfiguration(new BranchInventoryDebtConfiguration());
 
+        modelBuilder.Entity<InvoiceItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            entity.HasOne<Invoice>().WithMany(x => x.Items).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<UserBranchAssignment>(entity =>
         {
             entity.HasKey(x => new { x.UserId, x.BranchId });
             entity.HasIndex(x => x.BranchId);
             entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Branch>().WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PaymentMethod>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<DiscountDefinition>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Value).HasPrecision(18, 2);
+            entity.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<ApplicationSetting>(entity =>
+        {
+            entity.HasKey(x => x.Key);
+            entity.Property(x => x.Key).HasMaxLength(120);
+            entity.Property(x => x.Value).HasMaxLength(2000);
+        });
+
+        modelBuilder.Entity<GoodsReceipt>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Reference).HasMaxLength(120);
+            entity.HasOne<Artist>().WithMany().HasForeignKey(x => x.ArtistId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GoodsReceiptLine>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PurchaseUnitPrice).HasPrecision(18, 2);
+            entity.HasOne<GoodsReceipt>().WithMany(x => x.Items).HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
 
         base.OnModelCreating(modelBuilder);
