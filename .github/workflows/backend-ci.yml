@@ -68,7 +68,7 @@ jobs:
           NETWORK="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$PG_CONTAINER")"
           test -n "$NETWORK"
 
-          docker build -t mercato-api-pos-smoke:ci backend
+          docker build -f backend/Dockerfile -t mercato-api-pos-smoke:ci .
           docker run -d \
             --name mercato-pos-smoke-api \
             --network "$NETWORK" \
