@@ -58,6 +58,21 @@ jobs:
       - name: Build backend
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
+      - name: Validate browser JavaScript syntax
+        run: |
+          set -euo pipefail
+          node --check backend/src/Mercato.Api/wwwroot/mercato-ui.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          for name in ('admin', 'pos'):
+              html = Path(f'backend/src/Mercato.Api/wwwroot/{name}/index.html').read_text(encoding='utf-8')
+              blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.I | re.S)
+              Path(f'/tmp/{name}-inline.js').write_text('\n'.join(blocks), encoding='utf-8')
+          PY
+          node --check /tmp/admin-inline.js
+          node --check /tmp/pos-inline.js
+
       - name: Run POS Docker runtime smoke test
         env:
           MERCATO_POS_BASE_URL: http://127.0.0.1:5081
