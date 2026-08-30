@@ -1,3 +1,4 @@
+using Mercato.Api.Services;
 using Mercato.Application.DTOs;
 using Mercato.Application.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -11,15 +12,27 @@ namespace Mercato.Api.Controllers;
 public sealed class BranchesController : ControllerBase
 {
     private readonly IBranchService _branches;
+    private readonly CurrentUserBranchAccess _branchAccess;
 
-    public BranchesController(IBranchService branches)
+    public BranchesController(IBranchService branches, CurrentUserBranchAccess branchAccess)
     {
         _branches = branches;
+        _branchAccess = branchAccess;
     }
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
         => Ok(await _branches.GetAllAsync(cancellationToken));
+
+    [HttpGet("accessible")]
+    [Authorize(Roles = "Admin,Manager,Cashier")]
+    public async Task<IActionResult> GetAccessible(CancellationToken cancellationToken)
+    {
+        var branches = await _branches.GetAllAsync(cancellationToken);
+        if (_branchAccess.IsAdmin) return Ok(branches);
+        var allowed = (await _branchAccess.GetAllowedBranchIdsAsync(cancellationToken)).ToHashSet();
+        return Ok(branches.Where(x => allowed.Contains(x.Id)));
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
