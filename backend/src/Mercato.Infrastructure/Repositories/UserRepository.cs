@@ -23,6 +23,9 @@ public sealed class UserRepository : IUserRepository
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
         => _context.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
 
+    public Task<User?> GetByMobileNumberAsync(string mobileNumber, CancellationToken cancellationToken = default)
+        => _context.Users.FirstOrDefaultAsync(x => x.MobileNumber == mobileNumber, cancellationToken);
+
     public async Task AddAsync(User user, CancellationToken cancellationToken = default)
     {
         _context.Users.Add(user);
