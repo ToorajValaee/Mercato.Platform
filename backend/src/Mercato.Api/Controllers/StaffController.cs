@@ -42,13 +42,16 @@ public sealed class StaffController : ControllerBase
     public async Task<IActionResult> Create(CreateStaffRequest request, CancellationToken cancellationToken)
     {
         var email = request.Email?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(email)) return BadRequest(new { error = "Email is required." });
+        var mobileNumber = NormalizeMobileNumber(request.MobileNumber);
+        if (string.IsNullOrWhiteSpace(mobileNumber)) return BadRequest(new { error = "Mobile number is required." });
         if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
             return BadRequest(new { error = "Password must be at least 8 characters." });
         if (!TryNormalizeRole(request.Role, out var role))
             return BadRequest(new { error = "Role must be Admin, Manager, or Cashier." });
-        if (await _users.GetByEmailAsync(email, cancellationToken) is not null)
+        if (!string.IsNullOrWhiteSpace(email) && await _users.GetByEmailAsync(email, cancellationToken) is not null)
             return Conflict(new { error = "Email already exists." });
+        if (await _users.GetByMobileNumberAsync(mobileNumber, cancellationToken) is not null)
+            return Conflict(new { error = "Mobile number already exists." });
 
         var branchIds = await ValidateBranchIdsAsync(request.BranchIds, cancellationToken);
         if (branchIds is null) return BadRequest(new { error = "One or more selected branches do not exist." });
@@ -57,8 +60,10 @@ public sealed class StaffController : ControllerBase
         {
             Id = Guid.NewGuid(),
             Email = email,
+            MobileNumber = mobileNumber,
             PasswordHash = _passwords.Hash(request.Password),
-            Role = role
+            Role = role,
+            CanAccessBackOffice = request.CanAccessBackOffice
         };
         await _users.AddAsync(user, cancellationToken);
         await _users.SetBranchIdsAsync(user.Id, branchIds, cancellationToken);
@@ -74,14 +79,27 @@ public sealed class StaffController : ControllerBase
         if (!TryNormalizeRole(request.Role, out var role))
             return BadRequest(new { error = "Role must be Admin, Manager, or Cashier." });
 
+        var mobileNumber = NormalizeMobileNumber(request.MobileNumber);
+        if (string.IsNullOrWhiteSpace(mobileNumber)) return BadRequest(new { error = "Mobile number is required." });
+        var duplicateMobile = await _users.GetByMobileNumberAsync(mobileNumber, cancellationToken);
+        if (duplicateMobile is not null && duplicateMobile.Id != id)
+            return Conflict(new { error = "Mobile number already exists." });
+
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.TryParse(currentUserId, out var currentId) && currentId == id && role != "Admin")
-            return BadRequest(new { error = "You cannot remove your own Admin role." });
+        if (Guid.TryParse(currentUserId, out var currentId) && currentId == id)
+        {
+            if (role != "Admin")
+                return BadRequest(new { error = "You cannot remove your own Admin role." });
+            if (!request.CanAccessBackOffice)
+                return BadRequest(new { error = "You cannot remove your own Back Office access." });
+        }
 
         var branchIds = await ValidateBranchIdsAsync(request.BranchIds, cancellationToken);
         if (branchIds is null) return BadRequest(new { error = "One or more selected branches do not exist." });
 
+        user.MobileNumber = mobileNumber;
         user.Role = role;
+        user.CanAccessBackOffice = request.CanAccessBackOffice;
         if (!string.IsNullOrWhiteSpace(request.Password))
         {
             if (request.Password.Length < 8)
@@ -105,7 +123,15 @@ public sealed class StaffController : ControllerBase
     }
 
     private async Task<object> ToDtoAsync(User user, CancellationToken cancellationToken)
-        => new { user.Id, user.Email, user.Role, BranchIds = await _users.GetBranchIdsAsync(user.Id, cancellationToken) };
+        => new
+        {
+            user.Id,
+            user.Email,
+            user.MobileNumber,
+            user.Role,
+            user.CanAccessBackOffice,
+            BranchIds = await _users.GetBranchIdsAsync(user.Id, cancellationToken)
+        };
 
     private async Task<IReadOnlyList<Guid>?> ValidateBranchIdsAsync(IReadOnlyCollection<Guid>? values, CancellationToken cancellationToken)
     {
@@ -124,6 +150,30 @@ public sealed class StaffController : ControllerBase
         return true;
     }
 
-    public sealed record CreateStaffRequest(string Email, string Password, string Role, IReadOnlyCollection<Guid>? BranchIds = null);
-    public sealed record UpdateStaffRequest(string Role, string? Password, IReadOnlyCollection<Guid>? BranchIds = null);
+    private static string NormalizeMobileNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var chars = value.Trim().Select(ch => ch switch
+        {
+            >= '۰' and <= '۹' => (char)('0' + ch - '۰'),
+            >= '٠' and <= '٩' => (char)('0' + ch - '٠'),
+            _ => ch
+        });
+        return new string(chars.ToArray()).Replace(" ", string.Empty, StringComparison.Ordinal);
+    }
+
+    public sealed record CreateStaffRequest(
+        string? Email,
+        string MobileNumber,
+        string Password,
+        string Role,
+        bool CanAccessBackOffice = false,
+        IReadOnlyCollection<Guid>? BranchIds = null);
+
+    public sealed record UpdateStaffRequest(
+        string MobileNumber,
+        string Role,
+        bool CanAccessBackOffice,
+        string? Password,
+        IReadOnlyCollection<Guid>? BranchIds = null);
 }
