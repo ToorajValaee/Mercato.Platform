@@ -37,9 +37,6 @@ public class MercatoDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // System.Object is not a persistence entity. Ignore it before applying any
-        // configuration/conventions so an untyped CLR member can never be promoted
-        // into an EF entity during model discovery.
         modelBuilder.Ignore<object>();
 
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
@@ -67,6 +64,15 @@ public class MercatoDbContext : DbContext
             entity.Property(x => x.Quantity).HasPrecision(18, 4);
             entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
             entity.HasOne<Invoice>().WithMany(x => x.Items).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(320);
+            entity.Property(x => x.MobileNumber).HasMaxLength(40);
+            entity.Property(x => x.Role).HasMaxLength(40).IsRequired();
+            entity.HasIndex(x => x.MobileNumber).IsUnique().HasFilter("\"MobileNumber\" IS NOT NULL");
         });
 
         modelBuilder.Entity<UserBranchAssignment>(entity =>
