@@ -33,6 +33,11 @@ public static class DatabaseInitializer
                     );
                     CREATE INDEX IF NOT EXISTS "IX_UserBranchAssignments_BranchId" ON "UserBranchAssignments" ("BranchId");
 
+                    ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "MobileNumber" character varying(40) NULL;
+                    ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "CanAccessBackOffice" boolean NOT NULL DEFAULT FALSE;
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_MobileNumber" ON "Users" ("MobileNumber") WHERE "MobileNumber" IS NOT NULL;
+                    UPDATE "Users" SET "CanAccessBackOffice" = TRUE WHERE "Role" = 'Admin' AND "CanAccessBackOffice" = FALSE;
+
                     ALTER TABLE "Products" ADD COLUMN IF NOT EXISTS "ImageUrl" text NULL;
                     ALTER TABLE "Orders" ADD COLUMN IF NOT EXISTS "SubtotalAmount" numeric(18,2) NOT NULL DEFAULT 0;
                     ALTER TABLE "Orders" ADD COLUMN IF NOT EXISTS "DiscountId" uuid NULL;
