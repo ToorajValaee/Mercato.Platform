@@ -50,7 +50,7 @@ public class AuthController : ControllerBase
             return Ok(new
             {
                 token,
-                user = new { user.Id, user.Email, user.Role }
+                user = new { user.Id, user.Email, user.MobileNumber, user.Role, user.CanAccessBackOffice }
             });
         }
         catch (UnauthorizedAccessException)
@@ -68,14 +68,18 @@ public class AuthController : ControllerBase
         if (key.Length < 32)
             throw new InvalidOperationException("JWT signing key must be at least 32 characters.");
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString("D")),
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString("D")),
-            new Claim(ClaimTypes.Name, user.Email),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role)
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString("D")),
+            new(ClaimTypes.NameIdentifier, user.Id.ToString("D")),
+            new(ClaimTypes.Name, string.IsNullOrWhiteSpace(user.MobileNumber) ? user.Email : user.MobileNumber),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Role, user.Role),
+            new("backoffice", user.CanAccessBackOffice ? "true" : "false")
         };
+        if (!string.IsNullOrWhiteSpace(user.MobileNumber))
+            claims.Add(new Claim("mobile_number", user.MobileNumber));
+
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
@@ -89,6 +93,7 @@ public class AuthController : ControllerBase
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    // Kept as Email for wire compatibility; the value may be an email address or mobile number.
     public record LoginRequest(string Email, string Password);
     public record RegisterRequest(string Email, string Password);
 }
