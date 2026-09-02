@@ -5,6 +5,7 @@ using Mercato.Infrastructure.Data;
 using Mercato.Application.Interfaces;
 using Mercato.Application.Repositories;
 using Mercato.Infrastructure.Repositories;
+using Mercato.Infrastructure.Storage;
 
 namespace Mercato.Infrastructure;
 
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IPaymentMethodRepository, PaymentMethodRepository>();
         services.AddScoped<IDiscountRepository, DiscountRepository>();
+        services.AddSingleton<IProductMediaStorage, MinioProductMediaStorage>();
 
         return services;
     }
