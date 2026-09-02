@@ -67,7 +67,8 @@ using (var scope = app.Services.CreateScope())
             {
                 Email = bootstrapEmail,
                 PasswordHash = passwordService.Hash(bootstrapPassword),
-                Role = "Admin"
+                Role = "Admin",
+                CanAccessBackOffice = true
             });
             await dbContext.SaveChangesAsync();
         }
