@@ -1,0 +1,20 @@
+{
+  "Back Office": "Back Office",
+  "Dashboard": "Dashboard",
+  "Products": "Products",
+  "Categories": "Categories",
+  "Artists": "Artists",
+  "Branches": "Branches",
+  "Inventory": "Inventory",
+  "Customers": "Customers",
+  "Invoices": "Invoices",
+  "Staff": "Staff",
+  "Settings": "Settings",
+  "Email / Mobile number": "Email / Mobile number",
+  "Mobile number": "Mobile number",
+  "Product image": "Product image",
+  "Choose image": "Choose image",
+  "Back Office access": "Back Office access",
+  "Allow Back Office access": "Allow Back Office access",
+  "Reference is an optional external document or tracking number; Mercato still creates its own internal ID.": "Reference is an optional external document or tracking number; Mercato still creates its own internal ID."
+}
