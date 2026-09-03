@@ -10,6 +10,8 @@ public sealed class NopStartup : INopStartup
     public void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<OrderSyncCore>();
+        services.AddScoped<NopOrderSyncService>();
+        services.AddScoped<OrderSyncRetryTask>();
     }
 
     public void Configure(IApplicationBuilder application)
