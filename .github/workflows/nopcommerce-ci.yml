@@ -7,11 +7,13 @@ on:
       - 'integrations/nopCommerce/**'
       - '.github/workflows/nopcommerce-ci.yml'
       - 'docs/Mercato.Platform.Specification.md'
+      - 'README.md'
   pull_request:
     paths:
       - 'integrations/nopCommerce/**'
       - '.github/workflows/nopcommerce-ci.yml'
       - 'docs/Mercato.Platform.Specification.md'
+      - 'README.md'
 
 concurrency:
   group: nopcommerce-regression-${{ github.ref }}
