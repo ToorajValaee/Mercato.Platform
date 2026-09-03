@@ -30,7 +30,9 @@
   <ItemGroup Condition="'$(NopCommerceRoot)' == ''">
     <Compile Remove="NopPlugin.cs" />
     <Compile Remove="NopStartup.cs" />
+    <Compile Remove="NopOrderSyncService.cs" />
     <Compile Remove="OrderPaidConsumer.cs" />
+    <Compile Remove="OrderSyncRetryTask.cs" />
   </ItemGroup>
 
   <Target Name="NopTarget" AfterTargets="Build" Condition="'$(NopCommerceRoot)' != ''">
