@@ -1,6 +1,6 @@
 # Mercato Platform Specification
 
-Version: 2.0
+Version: 2.1
 Purpose: Source of truth for product requirements, architecture, business rules, implementation status, known gaps, and continuation work.
 
 ## 1. Product boundary
@@ -60,7 +60,7 @@ Staff-to-branch membership is persisted in `UserBranchAssignments` with a compos
 - branch-scoped catalog access, POS checkout, POS order lookup/returns, inventory reads, adjustments, transfers, and movement history enforce branch membership server-side.
 - a browser client cannot gain branch access by manually posting another branch ID.
 
-Until a production EF migration baseline is introduced, startup creates `UserBranchAssignments` additively with `CREATE TABLE IF NOT EXISTS` because `EnsureCreated` does not evolve an already-existing development schema.
+The committed EF Core migration baseline includes `UserBranchAssignments`. Startup also retains idempotent compatibility DDL for legacy databases so an older Mercato schema can be adopted without destructive recreation; EF migration history is authoritative for fresh and future schema upgrades.
 
 ## 3. POS sale flow
 
@@ -135,7 +135,7 @@ This is not a policy-defined double-entry general ledger. Chart of accounts, jur
 
 Target release: **nopCommerce 4.90.7** (`release-4.90.7`) on **.NET 9**.
 
-Further nopCommerce feature development is intentionally paused until the user accepts the Core/Back Office/POS milestone. Existing plugin code is retained and its regression workflow is manual-only during this acceptance phase.
+The nopCommerce integration is active and protected by an authoritative regression workflow that checks out the official nopCommerce 4.90.7 source, exercises the native runtime integration, and stages installable plugin packages.
 
 The five concrete Mercato plugin projects follow nopCommerce 4.90.7's native plugin conventions:
 - target `net9.0`;
@@ -188,24 +188,33 @@ Synchronization triggers:
 - plugin uninstall removes the corresponding schedule task.
 
 Packaging and validation:
-- the manual nopCommerce regression workflow checks out official nopCommerce `release-4.90.7` and compiles the concrete plugins against it;
+- the nopCommerce regression workflow checks out official nopCommerce `release-4.90.7` and compiles all five concrete plugins against it;
 - concrete builds run nopCommerce's own plugin-assembly cleanup target;
+- runtime acceptance covers clean installation, Connector configuration, BranchSelector storefront behavior, product/category synchronization, inventory synchronization, and paid-order synchronization;
+- paid-order retry acceptance verifies the stable `nop:{orderId}` idempotency key, durable `Mercato.OrderSyncedUtc` marker, successful scheduled retry after a simulated Mercato failure, and no duplicate retry after success;
 - the workflow packages the cleaned native `Nop.Web/Plugins/Mercato.*` directories as artifact `mercato-nopcommerce-4.90.7-plugins` rather than reconstructing plugin folders manually;
-- a prior native-package run completed backend build/tests, all five concrete plugin builds, staging, and artifact upload successfully.
+- the workflow supports manual dispatch and runs automatically when integration/workflow/specification changes require regression coverage.
 
-Remaining nopCommerce work is deployed-environment end-to-end verification and richer synchronization/runtime acceptance after Mercato UI acceptance.
+Remaining nopCommerce work is deployment-specific connection and merchant acceptance against the intended production nopCommerce instance, not missing repository implementation.
 
-## 10. Database initialization
+## 10. Database initialization and migrations
 
-No production EF migration baseline currently exists. Startup uses migrations when migrations exist and otherwise `EnsureCreated` for a fresh deployment. Local Docker initialization must not pre-create application tables or marker tables before `EnsureCreated`, because any pre-existing user table causes EF to treat the database as non-empty and skip schema creation. Before upgrading an existing production database, create and review a baseline/current EF migration; `EnsureCreated` is not a general schema-upgrade strategy.
+The EF Core 10 baseline `20260903155225_InitialBaseline` is committed with its designer and `MercatoDbContextModelSnapshot`.
 
-`UserBranchAssignments` is currently the one additive compatibility table created with `CREATE TABLE IF NOT EXISTS` after initialization so existing development databases can adopt staff branch access before the migration baseline is created.
+For the shipped build, startup discovers the committed migrations and uses EF migration history:
+- an empty PostgreSQL database receives the initial baseline through `MigrateAsync`;
+- an existing Mercato database with no EF history is recognized by its established `Products` schema, the initial baseline is stamped into `__EFMigrationsHistory`, and normal migration processing continues without recreating existing tables;
+- idempotent compatibility DDL remains after migration initialization for legacy additions such as staff branch assignments and later additive fields/tables.
+
+`backend/migration-smoke.sh` is part of Core/POS CI. It validates a fresh PostgreSQL 16 database, verifies core migrated tables (`Products` and `Branches`), constructs an existing pre-history Mercato schema, adds unrelated sentinel data, removes migration history, starts the real API initializer, and verifies both baseline adoption and sentinel preservation.
+
+Future schema changes must be represented by reviewed forward EF migrations and must continue to pass this fresh/existing database regression. The one-shot baseline-generation workflow has been retired now that the generated migration is committed. Persistent-volume deletion is not a migration strategy.
 
 The runtime image includes the GSSAPI/Kerberos dependency required by Npgsql (`libgssapi-krb5-2`).
 
 ## 11. Resolved technical debt
 
-Resolved: checkout DTO/type shadowing, obsolete checkout workflow stub, no-op inventory repository, no-op UnitOfWork, placeholder branch/invoice/transfer/settlement APIs, in-memory-only order/invoice persistence, client-trusted POS prices, invalid unattributed settlement creation, missing checkout retry protection, broken central NuGet package management, missing Infrastructure → Application project reference, partial Docker schema bootstrap conflicting with EF `EnsureCreated`, missing Npgsql GSSAPI runtime dependency, Docker build context missing test projects referenced by the solution, missing staff administration path, lack of usable Mercato operator/back-office UI, root-category creation incorrectly treating two null values as self-parenting, missing staff branch assignment, unpaginated operator grids, non-searchable business selects, and lack of Farsi/Jalali operator localization.
+Resolved: checkout DTO/type shadowing, obsolete checkout workflow stub, no-op inventory repository, no-op UnitOfWork, placeholder branch/invoice/transfer/settlement APIs, in-memory-only order/invoice persistence, client-trusted POS prices, invalid unattributed settlement creation, missing checkout retry protection, broken central NuGet package management, missing Infrastructure → Application project reference, partial Docker schema bootstrap conflicting with EF initialization, missing production EF migration baseline, missing existing-schema migration adoption regression, missing Npgsql GSSAPI runtime dependency, Docker build context missing test projects referenced by the solution, missing staff administration path, lack of usable Mercato operator/back-office UI, root-category creation incorrectly treating two null values as self-parenting, missing staff branch assignment, unpaginated operator grids, non-searchable business selects, and lack of Farsi/Jalali operator localization.
 
 A non-blocking EF model warning remains: `System.Object` is detected and then ignored during model creation. It does not prevent schema creation/runtime acceptance, but its originating model convention should be removed in later cleanup rather than merely ignored.
 
@@ -243,10 +252,14 @@ Implemented core platform development:
 - [x] Accounting transaction/reporting API
 - [x] Docker Compose local acceptance stack with opt-in development demo data
 - [x] Production-like Docker/PostgreSQL HTTP acceptance covering Back Office and POS
-- [x] CI browser-JavaScript syntax validation for shared UI, Back Office and POS scripts
-- [x] nopCommerce target locked to 4.90.7
-- [x] existing nopCommerce plugin project/output/dependency/connector/product/inventory/branch/order-sync structures retained
-- [x] nopCommerce regression workflow separated to manual-only while Mercato UI is being accepted
+- [x] CI frontend build/typecheck and browser/runtime validation
+- [x] EF Core `InitialBaseline` migration and model snapshot committed
+- [x] CI fresh PostgreSQL migration validation
+- [x] CI existing-schema baseline adoption and data-preservation validation
+- [x] production-like Compose profile with mandatory secrets and isolated PostgreSQL/MinIO networking
+- [x] nopCommerce target locked to 4.90.7 / .NET 9
+- [x] nopCommerce plugin project/output/dependency/connector/product/inventory/branch/order-sync structures aligned with native 4.90.7 conventions
+- [x] authoritative nopCommerce clean-install/runtime/synchronization/retry/package regression workflow
 
 Business/policy decisions intentionally unresolved:
 - [ ] final POS payment methods and method-specific fields
@@ -255,19 +268,22 @@ Business/policy decisions intentionally unresolved:
 - [ ] chart of accounts / double-entry GL decision
 - [ ] settlement approval and external-payment metadata
 - [ ] fiscal/legal receipt requirements beyond current durable receipt payload
-- [ ] production EF migrations for schema upgrades
 
-Integration/deployment work still required:
-- [ ] user hands-on acceptance of Core/Back Office/POS
-- [ ] production-readiness/security review
-- [ ] production EF migration baseline before real schema upgrades
-- [ ] resume nopCommerce runtime/end-to-end work after Mercato acceptance
+Integration/deployment work still required outside repository implementation:
+- [ ] user/operator hands-on acceptance on the intended deployment server
+- [ ] provision real production secrets outside source control
+- [ ] configure HTTPS/reverse proxy and deployment network controls
+- [ ] verify PostgreSQL backup and restore on the target environment
+- [ ] verify MinIO backup and restore on the target environment
+- [ ] connect and accept the intended production nopCommerce 4.90.7 instance
 
 ## 13. Validation status
 
-Core/Back Office/POS run `33283950862` completed successfully on August 30, 2026. It passed Release build, JavaScript syntax validation for the shared UI/Back Office/POS browser scripts, production-like Docker image build, PostgreSQL fresh-schema creation, bootstrap Admin/demo data, root workspace landing, Back Office rendering, root-category creation with `ParentCategoryId=null`, staff branch assignment persistence, Cashier login with assigned-branch-only discovery, POS branch catalog, completed sale, idempotent replay, exact stock deduction, order lookup, partial return, exact stock restoration, and the full backend test suite.
+Core/Back Office/POS CI is the authoritative repository regression for the Mercato application. It validates the frontend production build/typecheck, Release backend build, PostgreSQL migration behavior for both fresh and existing schemas, localization resources, production-like POS Docker runtime behavior, and the backend test suites.
 
-The normal CI pipeline validates Core/Back Office/POS only. nopCommerce regression is intentionally available as a separate manual workflow until the user accepts Mercato and asks to resume nopCommerce development.
+nopCommerce 4.90.7 Regression is the authoritative integration regression. It checks out official nopCommerce `release-4.90.7`, builds the native Mercato plugins, performs clean-install and runtime configuration/storefront/synchronization/paid-order-retry acceptance, and stages the native plugin package artifact.
+
+A repository release is accepted only when both workflows complete successfully on the exact same final commit SHA. This specification is intentionally included in the nopCommerce workflow path filter so a final source-of-truth update can trigger both release suites on one revision.
 
 ## 14. Known policy decisions
 
@@ -277,4 +293,4 @@ Do not invent unresolved tax, discount, GL, fiscal receipt, settlement approval,
 
 ## 15. Update policy
 
-Update this document whenever implementation status, architecture, operator UI, localization, authorization, or a business rule changes. Future developers and AI agents must inspect the repository before trusting stale unchecked items.
+Update this document whenever implementation status, architecture, operator UI, localization, authorization, database migration behavior, integration validation, or a business rule changes. Future developers and AI agents must inspect the repository and current CI state before trusting stale unchecked items.
