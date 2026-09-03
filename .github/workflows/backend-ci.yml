@@ -65,6 +65,17 @@ jobs:
       - name: Build backend
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
+      - name: Install EF tooling
+        run: dotnet tool install --global dotnet-ef --version 10.0.0
+
+      - name: Validate fresh and existing database migrations
+        env:
+          PG_HOST: 127.0.0.1
+          PG_PORT: 55432
+          PG_USER: postgres
+          PG_PASSWORD: postgres
+        run: bash backend/migration-smoke.sh
+
       - name: Validate localization resources
         run: |
           python3 -m json.tool frontend/public/locales/fa.json >/dev/null
