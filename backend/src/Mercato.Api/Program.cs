@@ -31,8 +31,7 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwt["Issuer"],
             ValidAudience = jwt["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwt["Key"] ?? string.Empty))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"] ?? string.Empty))
         };
     });
 
@@ -57,7 +56,11 @@ app.Use(async (context, next) =>
         if (File.Exists(file))
         {
             var html = await File.ReadAllTextAsync(file, context.RequestAborted);
-            html = html.Replace("</body>", "<script src=\"/ui-fixes.js\"></script></body>", StringComparison.OrdinalIgnoreCase);
+            if (area == "admin")
+            {
+                html = html.Replace("</head>", "<link rel=\"icon\" type=\"image/svg+xml\" href=\"/admin/favicon.svg?v=2\"><link rel=\"shortcut icon\" href=\"/admin/favicon.svg?v=2\"></head>", StringComparison.OrdinalIgnoreCase);
+            }
+            html = html.Replace("</body>", "<script src=\"/ui-fixes.js?v=2\"></script></body>", StringComparison.OrdinalIgnoreCase);
             context.Response.ContentType = "text/html; charset=utf-8";
             await context.Response.WriteAsync(html, context.RequestAborted);
             return;
@@ -97,8 +100,7 @@ using (var scope = app.Services.CreateScope())
     }
 
     if (configuration.GetValue<bool>("BootstrapDemoData:Enabled") &&
-        !await dbContext.Branches.AnyAsync() &&
-        !await dbContext.Products.AnyAsync())
+        !await dbContext.Branches.AnyAsync() && !await dbContext.Products.AnyAsync())
     {
         var branchId = Guid.Parse("10000000-0000-0000-0000-000000000001");
         var products = new[]
