@@ -16,13 +16,8 @@ public static class DatabaseInitializer
             try
             {
                 var migrations = context.Database.GetMigrations();
-                if (migrations.Any())
-                    context.Database.Migrate();
-                else
-                    context.Database.EnsureCreated();
+                if (migrations.Any()) context.Database.Migrate(); else context.Database.EnsureCreated();
 
-                // EnsureCreated does not evolve an existing schema. Keep these additive upgrades
-                // until the production EF migration baseline is introduced.
                 context.Database.ExecuteSqlRaw("""
                     CREATE TABLE IF NOT EXISTS "UserBranchAssignments" (
                         "UserId" uuid NOT NULL,
@@ -33,8 +28,10 @@ public static class DatabaseInitializer
                     );
                     CREATE INDEX IF NOT EXISTS "IX_UserBranchAssignments_BranchId" ON "UserBranchAssignments" ("BranchId");
 
+                    ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "Username" character varying(120) NULL;
                     ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "MobileNumber" character varying(40) NULL;
                     ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "CanAccessBackOffice" boolean NOT NULL DEFAULT FALSE;
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_Username" ON "Users" ("Username") WHERE "Username" IS NOT NULL;
                     CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_MobileNumber" ON "Users" ("MobileNumber") WHERE "MobileNumber" IS NOT NULL;
                     UPDATE "Users" SET "CanAccessBackOffice" = TRUE WHERE "Role" = 'Admin' AND "CanAccessBackOffice" = FALSE;
 
@@ -122,14 +119,12 @@ public static class DatabaseInitializer
 
                     INSERT INTO "ApplicationSettings" ("Key","Value") VALUES ('System.Language','en') ON CONFLICT ("Key") DO NOTHING;
                     INSERT INTO "ApplicationSettings" ("Key","Value") VALUES ('Pos.ShowProductImages','false') ON CONFLICT ("Key") DO NOTHING;
+                    INSERT INTO "ApplicationSettings" ("Key","Value") VALUES ('Auth.UseUsername','false') ON CONFLICT ("Key") DO NOTHING;
                     """);
 
                 return;
             }
-            catch (Exception exception) when (
-                attempt < MaxAttempts &&
-                IsTransient(exception) &&
-                !cancellationToken.IsCancellationRequested)
+            catch (Exception exception) when (attempt < MaxAttempts && IsTransient(exception) && !cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(attempt), cancellationToken);
             }
@@ -138,12 +133,8 @@ public static class DatabaseInitializer
 
     private static bool IsTransient(Exception exception)
     {
-        if (exception is TimeoutException)
-            return true;
-
-        if (exception is NpgsqlException npgsqlException && npgsqlException.IsTransient)
-            return true;
-
+        if (exception is TimeoutException) return true;
+        if (exception is NpgsqlException npgsqlException && npgsqlException.IsTransient) return true;
         return exception.InnerException is not null && IsTransient(exception.InnerException);
     }
 }
