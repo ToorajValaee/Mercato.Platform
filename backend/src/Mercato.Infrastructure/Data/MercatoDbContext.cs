@@ -70,8 +70,10 @@ public class MercatoDbContext : DbContext
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Email).HasMaxLength(320);
+            entity.Property(x => x.Username).HasMaxLength(120);
             entity.Property(x => x.MobileNumber).HasMaxLength(40);
             entity.Property(x => x.Role).HasMaxLength(40).IsRequired();
+            entity.HasIndex(x => x.Username).IsUnique().HasFilter("\"Username\" IS NOT NULL");
             entity.HasIndex(x => x.MobileNumber).IsUnique().HasFilter("\"MobileNumber\" IS NOT NULL");
         });
 
