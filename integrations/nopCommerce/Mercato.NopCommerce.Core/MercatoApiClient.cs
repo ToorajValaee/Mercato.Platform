@@ -5,7 +5,7 @@ namespace Mercato.NopCommerce.Core;
 
 public sealed record MercatoConnectorOptions(string BaseUrl, string BearerToken);
 public sealed record MercatoBranch(Guid Id, string Name, string? Address);
-public sealed record CatalogProduct(Guid ProductId, string Name, string? Sku, decimal SalePrice, Guid? CategoryId, Guid? ArtistId, Guid? BranchId, int? AvailableQuantity)
+public sealed record CatalogProduct(Guid ProductId, string Name, string? Sku, string? ImageUrl, decimal SalePrice, Guid? CategoryId, string? CategoryName, Guid? ArtistId, Guid? BranchId, int? AvailableQuantity)
 {
     public string NopSku => string.IsNullOrWhiteSpace(Sku) ? $"MERCATO-{ProductId:N}" : Sku.Trim();
 }
