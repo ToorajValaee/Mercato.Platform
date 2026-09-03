@@ -62,8 +62,8 @@ if [[ "$(psql_exec "${FRESH_DB}" "SELECT to_regclass('\"Products\"') IS NOT NULL
   echo 'Fresh migration did not create Products.' >&2
   exit 1
 fi
-if [[ "$(psql_exec "${FRESH_DB}" "SELECT to_regclass('\"Warehouses\"') IS NOT NULL;")" != 't' ]]; then
-  echo 'Fresh migration did not create Warehouses.' >&2
+if [[ "$(psql_exec "${FRESH_DB}" "SELECT to_regclass('\"Branches\"') IS NOT NULL;")" != 't' ]]; then
+  echo 'Fresh migration did not create Branches.' >&2
   exit 1
 fi
 
