@@ -2,11 +2,11 @@
   "Group": "Mercato",
   "FriendlyName": "Mercato Product Sync",
   "SystemName": "Mercato.ProductSync",
-  "Version": "4.90.7.2",
+  "Version": "4.90.7.3",
   "SupportedVersions": [ "4.90" ],
   "Author": "Tooraj Valaee",
   "DisplayOrder": 2,
   "FileName": "Nop.Plugin.Mercato.ProductSync.dll",
-  "Description": "Synchronizes Mercato-authoritative products into nopCommerce.",
+  "Description": "Synchronizes Mercato-authoritative products and categories into nopCommerce.",
   "DependsOnSystemNames": [ "Mercato.Connector" ]
 }
