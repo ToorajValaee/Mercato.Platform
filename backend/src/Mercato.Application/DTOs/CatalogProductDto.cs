@@ -7,6 +7,7 @@ public sealed record CatalogProductDto(
     string? ImageUrl,
     decimal SalePrice,
     Guid? CategoryId,
+    string? CategoryName,
     Guid? ArtistId,
     Guid? BranchId,
     int? AvailableQuantity);
