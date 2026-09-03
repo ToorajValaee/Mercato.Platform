@@ -16,6 +16,7 @@ public class CatalogTests
     public async Task Catalog_Rejects_Unknown_Branch_Before_Loading_Products()
     {
         var products = new Mock<IProductRepository>(MockBehavior.Strict);
+        var categories = new Mock<ICategoryRepository>(MockBehavior.Strict);
         var branches = new Mock<IBranchRepository>(MockBehavior.Strict);
         var inventory = new Mock<IInventoryService>(MockBehavior.Strict);
         var branchId = Guid.NewGuid();
@@ -24,13 +25,14 @@ public class CatalogTests
             .Setup(repository => repository.GetAsync(branchId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Branch?)null);
 
-        var service = new ProductCatalogServiceImplementation(products.Object, branches.Object, inventory.Object);
+        var service = new ProductCatalogServiceImplementation(products.Object, categories.Object, branches.Object, inventory.Object);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.GetCatalogAsync(branchId));
 
         Assert.Equal("Catalog branch was not found.", exception.Message);
         products.VerifyNoOtherCalls();
+        categories.VerifyNoOtherCalls();
         inventory.VerifyNoOtherCalls();
     }
 
@@ -38,6 +40,7 @@ public class CatalogTests
     public async Task Catalog_Returns_Authoritative_Price_And_Selected_Branch_Availability()
     {
         var products = new Mock<IProductRepository>(MockBehavior.Strict);
+        var categories = new Mock<ICategoryRepository>(MockBehavior.Strict);
         var branches = new Mock<IBranchRepository>(MockBehavior.Strict);
         var inventory = new Mock<IInventoryService>(MockBehavior.Strict);
         var branchId = Guid.NewGuid();
@@ -52,11 +55,14 @@ public class CatalogTests
             {
                 new ProductDto(productId, "Store product", "SKU-ONLINE", 12m, 29m, null, null)
             });
+        categories
+            .Setup(repository => repository.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Category>());
         inventory
             .Setup(service => service.GetAvailableQuantityAsync(productId, branchId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(7);
 
-        var service = new ProductCatalogServiceImplementation(products.Object, branches.Object, inventory.Object);
+        var service = new ProductCatalogServiceImplementation(products.Object, categories.Object, branches.Object, inventory.Object);
 
         var catalog = await service.GetCatalogAsync(branchId);
 
@@ -72,6 +78,7 @@ public class CatalogTests
     public async Task Catalog_Treats_Empty_Branch_As_Unscoped_Catalog()
     {
         var products = new Mock<IProductRepository>(MockBehavior.Strict);
+        var categories = new Mock<ICategoryRepository>(MockBehavior.Strict);
         var branches = new Mock<IBranchRepository>(MockBehavior.Strict);
         var inventory = new Mock<IInventoryService>(MockBehavior.Strict);
         var productId = Guid.NewGuid();
@@ -82,8 +89,11 @@ public class CatalogTests
             {
                 new ProductDto(productId, "Store product", "SKU-ONLINE", 12m, 29m, null, null)
             });
+        categories
+            .Setup(repository => repository.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Category>());
 
-        var service = new ProductCatalogServiceImplementation(products.Object, branches.Object, inventory.Object);
+        var service = new ProductCatalogServiceImplementation(products.Object, categories.Object, branches.Object, inventory.Object);
 
         var catalog = await service.GetCatalogAsync(Guid.Empty);
 
