@@ -11,10 +11,19 @@ for _ in {1..90}; do curl -fsS --max-time 3 "$BASE_URL/health" >/dev/null 2>&1 &
 curl -fsS --max-time 10 "$BASE_URL/health" >/dev/null
 curl -fsS "$BASE_URL/" -o "$WORK_DIR/home.html"; grep -q '<title>Mercato</title>' "$WORK_DIR/home.html"
 curl -fsS "$BASE_URL/pos/" -o "$WORK_DIR/pos.html"; grep -q '<title>Mercato POS</title>' "$WORK_DIR/pos.html"; grep -q '/ui-fixes.js' "$WORK_DIR/pos.html"; grep -q '/api/branches/accessible' "$WORK_DIR/pos.html"
-curl -fsS "$BASE_URL/admin/" -o "$WORK_DIR/admin.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin.html"; grep -q '/ui-fixes.js' "$WORK_DIR/admin.html"; grep -q 'salesChart' "$WORK_DIR/admin.html"; grep -q 'staffBranches' "$WORK_DIR/admin.html"; grep -q 'pager' "$WORK_DIR/admin.html"
-curl -fsS "$BASE_URL/mercato-ui.js" -o "$WORK_DIR/ui.js"; grep -q 'fa-IR-u-ca-persian' "$WORK_DIR/ui.js"; grep -q 'jalaliToLocalDateTime' "$WORK_DIR/ui.js"
-curl -fsS "$BASE_URL/ui-fixes.js" -o "$WORK_DIR/ui-fixes.js"; grep -q 'CanAccessBackOffice\|canAccessBackOffice' "$WORK_DIR/ui-fixes.js"
+curl -fsS "$BASE_URL/admin/" -o "$WORK_DIR/admin.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin.html"; grep -q '/admin/favicon.svg' "$WORK_DIR/admin.html"; grep -q '/ui-fixes.js' "$WORK_DIR/admin.html"; grep -q 'salesChart' "$WORK_DIR/admin.html"; grep -q 'staffBranches' "$WORK_DIR/admin.html"; grep -q 'pager' "$WORK_DIR/admin.html"
+curl -fsS "$BASE_URL/admin/favicon.svg" >/dev/null
+curl -fsS "$BASE_URL/admin/login-hero.svg" >/dev/null
+curl -fsS "$BASE_URL/pos/login-hero.svg" >/dev/null
+curl -fsS "$BASE_URL/mercato-ui.js" -o "$WORK_DIR/ui.js"; grep -q 'fa-IR-u-ca-persian' "$WORK_DIR/ui.js"; grep -q 'jalaliToLocalDateTime' "$WORK_DIR/ui.js"; grep -q 'return 31' "$WORK_DIR/ui.js"
+curl -fsS "$BASE_URL/ui-fixes.js" -o "$WORK_DIR/ui-fixes.js"; grep -q 'useUsername' "$WORK_DIR/ui-fixes.js"; grep -q 'print-powered' "$WORK_DIR/ui-fixes.js"
 curl -fsS "$BASE_URL/locales/fa.json" -o "$WORK_DIR/fa.json"; python3 -m json.tool "$WORK_DIR/fa.json" >/dev/null
+
+curl -fsS "$BASE_URL/api/settings/public" -o "$WORK_DIR/public-settings.json"
+python3 - "$WORK_DIR/public-settings.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); assert d['useUsername'] is False
+PY
 
 curl -fsS -H 'Content-Type: application/json' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" "$BASE_URL/api/auth/login" -o "$WORK_DIR/login.json"
 TOKEN="$(python3 - "$WORK_DIR/login.json" <<'PY'
@@ -39,15 +48,15 @@ PY
 )"
 curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/categories/$CATEGORY_ID" >/dev/null
 
-# Staff is identified by mobile, has branch assignments, and Back Office access is independent of role.
-STAFF_EMAIL="runtime-cashier-${RANDOM}@mercato.local"; STAFF_MOBILE="+98912${RANDOM}${RANDOM}"; STAFF_PASSWORD='RuntimeCashier123!'
-curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -d "{\"email\":\"$STAFF_EMAIL\",\"mobileNumber\":\"$STAFF_MOBILE\",\"password\":\"$STAFF_PASSWORD\",\"role\":\"Cashier\",\"canAccessBackOffice\":false,\"branchIds\":[\"$BRANCH_ID\"]}" "$BASE_URL/api/staff" -o "$WORK_DIR/staff.json"
-STAFF_ID="$(python3 - "$WORK_DIR/staff.json" "$BRANCH_ID" "$STAFF_MOBILE" <<'PY'
+# Default email-login mode: email is required; role, Back Office access, and branch assignment remain independent.
+STAFF_EMAIL="runtime-cashier-${RANDOM}@mercato.local"; STAFF_PASSWORD='RuntimeCashier123!'
+curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -d "{\"email\":\"$STAFF_EMAIL\",\"username\":null,\"password\":\"$STAFF_PASSWORD\",\"role\":\"Cashier\",\"canAccessBackOffice\":false,\"branchIds\":[\"$BRANCH_ID\"]}" "$BASE_URL/api/staff" -o "$WORK_DIR/staff.json"
+STAFF_ID="$(python3 - "$WORK_DIR/staff.json" "$BRANCH_ID" "$STAFF_EMAIL" <<'PY'
 import json,sys
-d=json.load(open(sys.argv[1])); assert d['role']=='Cashier'; assert d['mobileNumber']==sys.argv[3]; assert d['canAccessBackOffice'] is False; assert sys.argv[2] in d['branchIds']; print(d['id'])
+d=json.load(open(sys.argv[1])); assert d['role']=='Cashier'; assert d['email']==sys.argv[3]; assert d.get('username') is None; assert d['canAccessBackOffice'] is False; assert sys.argv[2] in d['branchIds']; print(d['id'])
 PY
 )"
-curl -fsS -H 'Content-Type: application/json' -d "{\"email\":\"$STAFF_MOBILE\",\"password\":\"$STAFF_PASSWORD\"}" "$BASE_URL/api/auth/login" -o "$WORK_DIR/staff-login.json"
+curl -fsS -H 'Content-Type: application/json' -d "{\"email\":\"$STAFF_EMAIL\",\"password\":\"$STAFF_PASSWORD\"}" "$BASE_URL/api/auth/login" -o "$WORK_DIR/staff-login.json"
 STAFF_TOKEN="$(python3 - "$WORK_DIR/staff-login.json" <<'PY'
 import json,sys
 d=json.load(open(sys.argv[1])); assert d['user']['role']=='Cashier'; assert d['user']['canAccessBackOffice'] is False; print(d['token'])
@@ -58,6 +67,28 @@ python3 - "$WORK_DIR/staff-branches.json" "$BRANCH_ID" <<'PY'
 import json,sys
 d=json.load(open(sys.argv[1])); assert [x['id'] for x in d]==[sys.argv[2]], d
 PY
+
+# Username-login mode seeds existing usernames from email and accepts username-only staff.
+curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -X PUT -d '{"systemLanguage":"en","posShowProductImages":false,"useUsername":true}' "$BASE_URL/api/settings" >/dev/null
+curl -fsS -H 'Content-Type: application/json' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" "$BASE_URL/api/auth/login" -o "$WORK_DIR/admin-username-login.json"
+python3 - "$WORK_DIR/admin-username-login.json" "$ADMIN_EMAIL" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); assert d['user']['username']==sys.argv[2]; assert d['token']
+PY
+USERNAME="runtime-user-${RANDOM}"
+curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -d "{\"username\":\"$USERNAME\",\"email\":null,\"password\":\"$STAFF_PASSWORD\",\"role\":\"Cashier\",\"canAccessBackOffice\":false,\"branchIds\":[\"$BRANCH_ID\"]}" "$BASE_URL/api/staff" -o "$WORK_DIR/username-staff.json"
+USERNAME_STAFF_ID="$(python3 - "$WORK_DIR/username-staff.json" "$USERNAME" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); assert d['username']==sys.argv[2]; assert d['email']==''; print(d['id'])
+PY
+)"
+curl -fsS -H 'Content-Type: application/json' -d "{\"email\":\"$USERNAME\",\"password\":\"$STAFF_PASSWORD\"}" "$BASE_URL/api/auth/login" -o "$WORK_DIR/username-login.json"
+python3 - "$WORK_DIR/username-login.json" "$USERNAME" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); assert d['user']['username']==sys.argv[2]; assert d['token']
+PY
+curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/staff/$USERNAME_STAFF_ID" >/dev/null
+curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -X PUT -d '{"systemLanguage":"en","posShowProductImages":false,"useUsername":false}' "$BASE_URL/api/settings" >/dev/null
 
 curl -fsS "${AUTH[@]}" "$BASE_URL/api/catalog?branchId=$BRANCH_ID" -o "$WORK_DIR/catalog-before.json"
 read -r PRODUCT_ID INITIAL_STOCK < <(python3 - "$WORK_DIR/catalog-before.json" <<'PY'
@@ -105,4 +136,4 @@ d=json.load(open(sys.argv[1])); p=next(x for x in d if x['productId']==sys.argv[
 PY
 curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/staff/$STAFF_ID" >/dev/null
 
-echo "Mercato runtime smoke passed: localized UI assets, category creation, mobile staff branch access, POS sale/replay/return, and stock reconciliation."
+echo "Mercato runtime smoke passed: localized UI, Persian calendar source, favicon/login art, email/username auth modes, branch access, POS sale/replay/return, and stock reconciliation."
