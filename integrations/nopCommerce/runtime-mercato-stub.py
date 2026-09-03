@@ -14,6 +14,8 @@ SKU = os.environ.get("MERCATO_RUNTIME_PRODUCT_SKU", "MERCATO-RUNTIME-001")
 PRODUCT_NAME = os.environ.get("MERCATO_RUNTIME_PRODUCT_NAME", "Mercato Runtime Product")
 PRICE = float(os.environ.get("MERCATO_RUNTIME_PRODUCT_PRICE", "42.50"))
 STOCK = int(os.environ.get("MERCATO_RUNTIME_PRODUCT_STOCK", "17"))
+CATEGORY_ID = os.environ.get("MERCATO_RUNTIME_CATEGORY_ID", "55555555-5555-5555-5555-555555555555")
+CATEGORY_NAME = os.environ.get("MERCATO_RUNTIME_CATEGORY_NAME", "Runtime Category")
 
 BRANCHES = [
     {"id": DEFAULT_BRANCH_ID, "name": "Runtime Main Branch", "address": "Runtime address 1"},
@@ -27,8 +29,10 @@ def catalog(branch_id=None):
         "productId": PRODUCT_ID,
         "name": PRODUCT_NAME,
         "sku": SKU,
+        "imageUrl": None,
         "salePrice": PRICE,
-        "categoryId": None,
+        "categoryId": CATEGORY_ID,
+        "categoryName": CATEGORY_NAME,
         "artistId": None,
         "branchId": branch_id,
         "availableQuantity": quantity,
