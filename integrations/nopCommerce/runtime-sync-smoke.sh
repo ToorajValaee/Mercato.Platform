@@ -168,6 +168,11 @@ run_task() {
     exit 1
   fi
 
+  # nopCommerce's public scheduler endpoint intentionally enforces one run per period.
+  # Make this installed task due before each acceptance invocation, then execute through
+  # the same /scheduletask/runtask endpoint used by nopCommerce's own scheduler.
+  pg_scalar "UPDATE \"ScheduleTask\" SET \"LastStartUtc\" = NOW() - (GREATEST(\"Seconds\", 1) + 5) * INTERVAL '1 second', \"LastEndUtc\" = NOW() - INTERVAL '1 second' WHERE \"Type\"='${task_type//\'/\'\'}';" >/dev/null
+
   curl -fsS --max-time 120 \
     -X POST "$BASE_URL/scheduletask/runtask" \
     --data-urlencode "taskType=$task_type" \
@@ -260,19 +265,16 @@ wait_for_nop
 start_stub
 find_postgres_container
 
-# Product sync must create a concrete nop product/category pair and persist both Mercato identities.
 run_task "Mercato product synchronization"
 PRODUCT_DB_ID="$(assert_product_state "$PRODUCT_NAME" "$PRODUCT_PRICE" "0" | tail -n 1)"
 assert_product_mapping "$PRODUCT_DB_ID"
 assert_category_state "$PRODUCT_DB_ID" "$CATEGORY_NAME"
 grep -q 'GET /api/catalog HTTP' "$STUB_LOG_FILE"
 
-# Inventory sync must apply the authoritative default-branch stock snapshot.
 run_task "Mercato inventory synchronization"
 assert_product_state "$PRODUCT_NAME" "$PRODUCT_PRICE" "$PRODUCT_STOCK" >/dev/null
 grep -q "GET /api/catalog?branchId=$DEFAULT_BRANCH_ID HTTP" "$STUB_LOG_FILE"
 
-# Re-run against changed Mercato values to prove idempotent updates without duplicate products/categories.
 stop_stub
 STUB_PRODUCT_NAME="$UPDATED_NAME"
 STUB_PRODUCT_PRICE="$UPDATED_PRICE"
