@@ -1,5 +1,6 @@
 name: Generate EF Baseline
 
+# One-shot generator: migration-file commits do not retrigger this workflow.
 on:
   workflow_dispatch:
   push:
