@@ -6,21 +6,18 @@ Mercato is the **business and data authority**. The Back Office manages the busi
 
 ## Platform at a glance
 
-```text
-                         MERCATO
-                 Business / Data Authority
-                         │
-       ┌─────────────────┼──────────────────┐
-       │                 │                  │
-  Back Office            POS           nopCommerce
-  Management        Physical Sales      Online Sales
-       │                 │                  │
-       └─────────────────┴──────────────────┘
-                         │
-             Products / Categories
-              Prices / Inventory
-          Orders / Invoices / Payments
-        Accounting / Artist Settlements
+```mermaid
+flowchart TB
+    M["Mercato<br/>Business / Data Authority"]
+    A["Back Office<br/>Management"]
+    P["POS<br/>Physical Sales"]
+    N["nopCommerce<br/>Online Sales"]
+    D["Products / Categories<br/>Prices / Inventory<br/>Orders / Invoices / Payments<br/>Accounting / Artist Settlements"]
+
+    A --> M
+    P --> M
+    N <--> M
+    M --> D
 ```
 
 The core rule is simple: **business data is defined in Mercato and consumed by the sales channels**.
@@ -33,26 +30,23 @@ The core rule is simple: **business data is defined in Mercato and consumed by t
 
 Products are created and maintained in Mercato. They do not normally need to be recreated manually in nopCommerce.
 
-```text
-Back Office
-    │
-    ▼
-Mercato Product / Category / Price
-    │
-    ├──────────────► POS ─────────────► Physical Sale
-    │
-    └─ ProductSync ─► nopCommerce ────► Online Sale
-                                          │
-                                          ▼
-                                    OrderPaidEvent
-                                          │
-                                      OrderSync
-                                          │
-                                          ▼
-                                       Mercato
-                              Order + Inventory Deduction
-                              Invoice + Payment + Accounting
-                                  + Artist Settlement
+```mermaid
+flowchart LR
+    BO["Back Office"] --> MP["Mercato<br/>Product / Category / Price"]
+
+    MP --> POS["POS"]
+    POS --> PS["Physical Sale"]
+
+    MP -- "ProductSync" --> NOP["nopCommerce"]
+    NOP --> OS["Online Sale"]
+    OS --> PAID["OrderPaidEvent"]
+    PAID -- "OrderSync" --> TX["Mercato Business Transaction"]
+
+    TX --> ORDER["Order"]
+    TX --> STOCK["Inventory Deduction"]
+    TX --> INV["Invoice + Payment"]
+    TX --> ACC["Accounting"]
+    TX --> SETTLE["Artist Settlement"]
 ```
 
 ### Mercato → nopCommerce
@@ -72,15 +66,41 @@ When a nopCommerce order becomes paid, `Mercato.OrderSync` sends the sale into M
 
 Online-order synchronization uses the stable idempotency key `nop:{nopOrderId}`. Successful synchronization is marked durably in nopCommerce so a retry cannot create the same Mercato sale twice.
 
+```mermaid
+sequenceDiagram
+    participant Customer
+    participant Nop as nopCommerce
+    participant Sync as Mercato.OrderSync
+    participant Mercato
+    participant DB as PostgreSQL
+
+    Customer->>Nop: Complete online checkout
+    Nop->>Nop: Payment succeeds
+    Nop->>Sync: OrderPaidEvent
+    Sync->>Mercato: Checkout with nop:{nopOrderId}
+    Mercato->>DB: Order + inventory + invoice + payment
+    Mercato->>DB: Accounting + artist settlement
+    Mercato-->>Sync: Successful checkout result
+    Sync->>Nop: Persist Mercato.OrderSyncedUtc
+```
+
 ## Inventory model
 
 Mercato is the inventory authority. Stock belongs to branches and is derived from the inventory movement ledger.
 
-```text
-Product
-├── Branch A stock ─► POS A
-├── Branch B stock ─► POS B
-└── Online/default branch stock ─► nopCommerce
+```mermaid
+flowchart LR
+    PROD["Mercato Product"]
+    BA["Branch A Stock"]
+    BB["Branch B Stock"]
+    ON["Online / Default Branch Stock"]
+    PA["POS A"]
+    PB["POS B"]
+    NOP["nopCommerce Stock"]
+
+    PROD --> BA --> PA
+    PROD --> BB --> PB
+    PROD --> ON -- "InventorySync" --> NOP
 ```
 
 For nopCommerce, the Connector can define a default Mercato branch. Scheduled InventorySync publishes availability for that branch. A storefront customer can also have a selected Mercato branch through the BranchSelector integration; paid-order synchronization resolves the selected branch when available and otherwise falls back to the Connector default branch.
@@ -148,16 +168,14 @@ Mercato.Platform/
 
 The backend uses ASP.NET Core, EF Core and PostgreSQL with a consolidated Clean Architecture structure:
 
-```text
-Mercato.Api
-    │
-Mercato.Application
-    │
-Mercato.Domain
-    │
-Mercato.Infrastructure
-    │
-PostgreSQL / EF Core
+```mermaid
+flowchart TB
+    API["Mercato.Api"] --> APP["Mercato.Application"]
+    APP --> DOMAIN["Mercato.Domain"]
+    API --> INFRA["Mercato.Infrastructure"]
+    APP --> INFRA
+    INFRA --> EF["EF Core"]
+    EF --> PG["PostgreSQL"]
 ```
 
 ### Frontend
@@ -336,6 +354,8 @@ Two GitHub Actions suites protect the repository:
 
 - **Core and POS CI** — frontend build/typecheck, backend Release build, fresh/existing migration regression, localization checks, POS Docker runtime smoke and backend tests.
 - **nopCommerce 4.90.7 Regression** — official nopCommerce 4.90.7 checkout, all plugin builds, clean-install/runtime synchronization tests and packaged plugin artifact.
+
+README changes are included in the nopCommerce workflow path filter, so architecture/flow documentation changes are validated by both release suites on the same revision.
 
 A repository revision is considered code/release-ready only when both suites are green on the same final revision and the specification/readiness documentation matches that revision.
 
