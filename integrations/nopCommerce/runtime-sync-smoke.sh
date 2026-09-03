@@ -10,8 +10,6 @@ fi
 NOP_WEB="$NOP_ROOT/src/Presentation/Nop.Web"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_URL="${NOP_BASE_URL:-http://127.0.0.1:5080}"
-ADMIN_EMAIL="${NOP_ADMIN_EMAIL:-admin@mercato.local}"
-ADMIN_PASSWORD="${NOP_ADMIN_PASSWORD:-MercatoRuntime123!}"
 CONFIG_BASE_URL="${MERCATO_RUNTIME_BASE_URL:-http://127.0.0.1:5099}"
 CONFIG_BEARER_TOKEN="${MERCATO_RUNTIME_BEARER_TOKEN:-runtime-token}"
 DEFAULT_BRANCH_ID="${MERCATO_RUNTIME_DEFAULT_BRANCH_ID:-11111111-1111-1111-1111-111111111111}"
@@ -20,16 +18,16 @@ PRODUCT_SKU="${MERCATO_RUNTIME_PRODUCT_SKU:-MERCATO-RUNTIME-001}"
 PRODUCT_NAME="${MERCATO_RUNTIME_PRODUCT_NAME:-Mercato Runtime Product}"
 PRODUCT_PRICE="${MERCATO_RUNTIME_PRODUCT_PRICE:-42.50}"
 PRODUCT_STOCK="${MERCATO_RUNTIME_PRODUCT_STOCK:-17}"
+CATEGORY_ID="${MERCATO_RUNTIME_CATEGORY_ID:-55555555-5555-5555-5555-555555555555}"
+CATEGORY_NAME="${MERCATO_RUNTIME_CATEGORY_NAME:-Runtime Category}"
 UPDATED_NAME="${MERCATO_RUNTIME_UPDATED_PRODUCT_NAME:-Mercato Runtime Product Updated}"
 UPDATED_PRICE="${MERCATO_RUNTIME_UPDATED_PRODUCT_PRICE:-51.75}"
 UPDATED_STOCK="${MERCATO_RUNTIME_UPDATED_PRODUCT_STOCK:-9}"
+UPDATED_CATEGORY_NAME="${MERCATO_RUNTIME_UPDATED_CATEGORY_NAME:-Runtime Category Updated}"
 WORK_DIR="${RUNNER_TEMP:-/tmp}/mercato-nopcommerce-runtime-sync"
-COOKIE_JAR="$WORK_DIR/cookies.txt"
-LOGIN_PAGE="$WORK_DIR/login.html"
-LOGIN_RESULT="$WORK_DIR/login-result.html"
-TASK_RESULT="$WORK_DIR/task-result.html"
 LOG_FILE="$WORK_DIR/nopcommerce.log"
 STUB_LOG_FILE="$WORK_DIR/mercato-stub.log"
+TASK_RESULT="$WORK_DIR/task-result.txt"
 
 if [[ ! -f "$NOP_WEB/Nop.Web.csproj" ]]; then
   echo "Nop.Web.csproj was not found under $NOP_WEB" >&2
@@ -41,13 +39,14 @@ if [[ ! -f "$NOP_WEB/App_Data/plugins.json" ]]; then
 fi
 
 mkdir -p "$WORK_DIR"
-rm -f "$COOKIE_JAR" "$LOGIN_PAGE" "$LOGIN_RESULT" "$TASK_RESULT" "$LOG_FILE" "$STUB_LOG_FILE"
+rm -f "$LOG_FILE" "$STUB_LOG_FILE" "$TASK_RESULT"
 NOP_PID=""
 STUB_PID=""
 PG_CONTAINER="${NOP_POSTGRES_CONTAINER:-}"
 STUB_PRODUCT_NAME="$PRODUCT_NAME"
 STUB_PRODUCT_PRICE="$PRODUCT_PRICE"
 STUB_PRODUCT_STOCK="$PRODUCT_STOCK"
+STUB_CATEGORY_NAME="$CATEGORY_NAME"
 
 show_log() {
   if [[ -f "$LOG_FILE" ]]; then
@@ -104,6 +103,8 @@ start_stub() {
   MERCATO_RUNTIME_PRODUCT_NAME="$STUB_PRODUCT_NAME" \
   MERCATO_RUNTIME_PRODUCT_PRICE="$STUB_PRODUCT_PRICE" \
   MERCATO_RUNTIME_PRODUCT_STOCK="$STUB_PRODUCT_STOCK" \
+  MERCATO_RUNTIME_CATEGORY_ID="$CATEGORY_ID" \
+  MERCATO_RUNTIME_CATEGORY_NAME="$STUB_CATEGORY_NAME" \
     python3 "$SCRIPT_DIR/runtime-mercato-stub.py" >"$STUB_LOG_FILE" 2>&1 &
   STUB_PID=$!
 
@@ -131,7 +132,7 @@ wait_for_nop() {
       return 1
     fi
     local status
-    status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$BASE_URL/login" || true)"
+    status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$BASE_URL/" || true)"
     if [[ "$status" =~ ^(200|301|302|303|307|308)$ ]]; then
       return 0
     fi
@@ -140,30 +141,6 @@ wait_for_nop() {
   echo "Timed out waiting for nopCommerce." >&2
   show_log
   return 1
-}
-
-extract_input_value() {
-  python3 - "$1" "$2" <<'PY'
-from html.parser import HTMLParser
-import sys
-page, field = sys.argv[1:3]
-class Parser(HTMLParser):
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.value = None
-    def handle_starttag(self, tag, attrs):
-        if self.value is not None or tag.lower() != "input":
-            return
-        values = dict(attrs)
-        if values.get("name") == field:
-            self.value = values.get("value", "")
-p = Parser()
-with open(page, encoding="utf-8-sig") as stream:
-    p.feed(stream.read())
-if p.value is None:
-    raise SystemExit(f"Unable to locate input {field!r} in {page}")
-print(p.value)
-PY
 }
 
 find_postgres_container() {
@@ -183,21 +160,21 @@ pg_scalar() {
 
 run_task() {
   local task_name="$1"
-  local task_id
-  task_id="$(pg_scalar "SELECT \"Id\" FROM \"ScheduleTask\" WHERE \"Name\"='${task_name//\'/\'\'}' ORDER BY \"Id\" LIMIT 1;")"
-  if [[ -z "$task_id" ]]; then
+  local task_type
+  task_type="$(pg_scalar "SELECT \"Type\" FROM \"ScheduleTask\" WHERE \"Name\"='${task_name//\'/\'\'}' ORDER BY \"Id\" LIMIT 1;")"
+  if [[ -z "$task_type" ]]; then
     echo "Schedule task '$task_name' was not installed." >&2
     show_log
     exit 1
   fi
 
-  curl -fsS -L --max-time 120 \
-    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
-    "$BASE_URL/Admin/ScheduleTask/RunNow/$task_id" \
+  curl -fsS --max-time 120 \
+    -X POST "$BASE_URL/scheduletask/runtask" \
+    --data-urlencode "taskType=$task_type" \
     -o "$TASK_RESULT"
 
   local success
-  success="$(pg_scalar "SELECT CASE WHEN \"LastSuccessUtc\" IS NULL THEN '' ELSE \"LastSuccessUtc\"::text END FROM \"ScheduleTask\" WHERE \"Id\"=$task_id;")"
+  success="$(pg_scalar "SELECT CASE WHEN \"LastSuccessUtc\" IS NULL THEN '' ELSE \"LastSuccessUtc\"::text END FROM \"ScheduleTask\" WHERE \"Type\"='${task_type//\'/\'\'}' LIMIT 1;")"
   if [[ -z "$success" ]]; then
     echo "Schedule task '$task_name' did not record a successful execution." >&2
     cat "$TASK_RESULT" >&2 || true
@@ -236,7 +213,7 @@ print(product_id)
 PY
 }
 
-assert_mapping() {
+assert_product_mapping() {
   local product_db_id="$1"
   local mapping
   mapping="$(pg_scalar "SELECT \"Value\" FROM \"GenericAttribute\" WHERE \"EntityId\"=$product_db_id AND \"KeyGroup\"='Product' AND \"Key\"='Mercato.ProductId' ORDER BY \"Id\" DESC LIMIT 1;")"
@@ -246,32 +223,48 @@ assert_mapping() {
   fi
 }
 
+assert_category_state() {
+  local product_db_id="$1"
+  local expected_name="$2"
+  local category_db_id
+  category_db_id="$(pg_scalar "SELECT c.\"Id\" FROM \"Category\" c JOIN \"GenericAttribute\" ga ON ga.\"EntityId\"=c.\"Id\" AND ga.\"KeyGroup\"='Category' AND ga.\"Key\"='Mercato.CategoryId' WHERE lower(ga.\"Value\")=lower('${CATEGORY_ID//\'/\'\'}') ORDER BY c.\"Id\" LIMIT 1;")"
+  if [[ -z "$category_db_id" ]]; then
+    echo "Product sync did not create a nop category mapped to Mercato category $CATEGORY_ID." >&2
+    exit 1
+  fi
+
+  local category_name
+  category_name="$(pg_scalar "SELECT \"Name\" FROM \"Category\" WHERE \"Id\"=$category_db_id;")"
+  if [[ "$category_name" != "$expected_name" ]]; then
+    echo "Expected synchronized category name '$expected_name', got '$category_name'." >&2
+    exit 1
+  fi
+
+  local mapping_count
+  mapping_count="$(pg_scalar "SELECT COUNT(*) FROM \"Product_Category_Mapping\" WHERE \"ProductId\"=$product_db_id AND \"CategoryId\"=$category_db_id;")"
+  if [[ "$mapping_count" != "1" ]]; then
+    echo "Expected one product/category mapping for product $product_db_id and category $category_db_id, found $mapping_count." >&2
+    exit 1
+  fi
+
+  local category_count
+  category_count="$(pg_scalar "SELECT COUNT(*) FROM \"GenericAttribute\" WHERE \"KeyGroup\"='Category' AND \"Key\"='Mercato.CategoryId' AND lower(\"Value\")=lower('${CATEGORY_ID//\'/\'\'}');")"
+  if [[ "$category_count" != "1" ]]; then
+    echo "Expected one Mercato category identity mapping for $CATEGORY_ID, found $category_count." >&2
+    exit 1
+  fi
+}
+
 start_nop
 wait_for_nop
 start_stub
 find_postgres_container
 
-LOGIN_URL="$BASE_URL/login?returnUrl=%2FAdmin%2FScheduleTask%2FList"
-curl -fsS -c "$COOKIE_JAR" "$LOGIN_URL" -o "$LOGIN_PAGE"
-LOGIN_TOKEN="$(extract_input_value "$LOGIN_PAGE" "__RequestVerificationToken")"
-LOGIN_STATUS="$(curl -sS -L --max-time 60 \
-  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
-  -o "$LOGIN_RESULT" -w '%{http_code}' \
-  "$LOGIN_URL" \
-  --data-urlencode "__RequestVerificationToken=$LOGIN_TOKEN" \
-  --data-urlencode "Email=$ADMIN_EMAIL" \
-  --data-urlencode "Password=$ADMIN_PASSWORD" \
-  --data-urlencode "RememberMe=true")"
-if [[ "$LOGIN_STATUS" != "200" ]]; then
-  echo "nopCommerce administrator login failed for synchronization smoke (HTTP $LOGIN_STATUS)." >&2
-  show_log
-  exit 1
-fi
-
-# Product sync must create a concrete nop product and persist the Mercato identity mapping.
+# Product sync must create a concrete nop product/category pair and persist both Mercato identities.
 run_task "Mercato product synchronization"
 PRODUCT_DB_ID="$(assert_product_state "$PRODUCT_NAME" "$PRODUCT_PRICE" "0" | tail -n 1)"
-assert_mapping "$PRODUCT_DB_ID"
+assert_product_mapping "$PRODUCT_DB_ID"
+assert_category_state "$PRODUCT_DB_ID" "$CATEGORY_NAME"
 grep -q 'GET /api/catalog HTTP' "$STUB_LOG_FILE"
 
 # Inventory sync must apply the authoritative default-branch stock snapshot.
@@ -279,16 +272,18 @@ run_task "Mercato inventory synchronization"
 assert_product_state "$PRODUCT_NAME" "$PRODUCT_PRICE" "$PRODUCT_STOCK" >/dev/null
 grep -q "GET /api/catalog?branchId=$DEFAULT_BRANCH_ID HTTP" "$STUB_LOG_FILE"
 
-# Re-run both tasks against changed Mercato values to prove upsert/update behavior without duplicates.
+# Re-run against changed Mercato values to prove idempotent updates without duplicate products/categories.
 stop_stub
 STUB_PRODUCT_NAME="$UPDATED_NAME"
 STUB_PRODUCT_PRICE="$UPDATED_PRICE"
 STUB_PRODUCT_STOCK="$UPDATED_STOCK"
+STUB_CATEGORY_NAME="$UPDATED_CATEGORY_NAME"
 start_stub
 run_task "Mercato product synchronization"
 run_task "Mercato inventory synchronization"
 UPDATED_DB_ID="$(assert_product_state "$UPDATED_NAME" "$UPDATED_PRICE" "$UPDATED_STOCK" | tail -n 1)"
-assert_mapping "$UPDATED_DB_ID"
+assert_product_mapping "$UPDATED_DB_ID"
+assert_category_state "$UPDATED_DB_ID" "$UPDATED_CATEGORY_NAME"
 
 PRODUCT_COUNT="$(pg_scalar "SELECT COUNT(*) FROM \"Product\" WHERE \"Sku\"='${PRODUCT_SKU//\'/\'\'}';")"
 if [[ "$PRODUCT_COUNT" != "1" ]]; then
@@ -306,4 +301,4 @@ if grep -Eiq 'Unhandled exception|ReflectionTypeLoadException|Could not load fil
   exit 1
 fi
 
-echo "nopCommerce ProductSync and InventorySync runtime smoke test passed."
+echo "nopCommerce ProductSync category sync and InventorySync runtime smoke test passed."
