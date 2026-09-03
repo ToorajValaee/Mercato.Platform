@@ -40,6 +40,7 @@ apply_ef_migrations() {
     dotnet ef database update \
       --project "${PROJECT}" \
       --startup-project "${STARTUP_PROJECT}" \
+      --configuration Release \
       --no-build
 }
 
@@ -61,11 +62,16 @@ if [[ "$(psql_exec "${FRESH_DB}" "SELECT to_regclass('\"Products\"') IS NOT NULL
   echo 'Fresh migration did not create Products.' >&2
   exit 1
 fi
+if [[ "$(psql_exec "${FRESH_DB}" "SELECT to_regclass('\"Warehouses\"') IS NOT NULL;")" != 't' ]]; then
+  echo 'Fresh migration did not create Warehouses.' >&2
+  exit 1
+fi
 
 echo '== Existing database compatibility bridge =='
 reset_database "${EXISTING_DB}"
 apply_ef_migrations "${EXISTING_DB}"
-psql_exec "${EXISTING_DB}" "INSERT INTO \"ApplicationSettings\" (\"Key\", \"Value\") VALUES ('MigrationSmoke.Sentinel', 'preserve-me') ON CONFLICT (\"Key\") DO UPDATE SET \"Value\" = EXCLUDED.\"Value\";" >/dev/null
+psql_exec "${EXISTING_DB}" 'CREATE TABLE "MigrationSmokeSentinel" ("Id" integer PRIMARY KEY, "Payload" text NOT NULL);' >/dev/null
+psql_exec "${EXISTING_DB}" "INSERT INTO \"MigrationSmokeSentinel\" (\"Id\", \"Payload\") VALUES (1, 'preserve-me');" >/dev/null
 psql_exec "${EXISTING_DB}" 'DROP TABLE "__EFMigrationsHistory";' >/dev/null
 
 API_LOG="$(mktemp)"
@@ -103,8 +109,12 @@ done
 curl --fail --silent "http://127.0.0.1:${API_PORT}/health" >/dev/null
 
 assert_baseline_applied "${EXISTING_DB}"
-if [[ "$(psql_exec "${EXISTING_DB}" "SELECT \"Value\" FROM \"ApplicationSettings\" WHERE \"Key\" = 'MigrationSmoke.Sentinel';")" != 'preserve-me' ]]; then
+if [[ "$(psql_exec "${EXISTING_DB}" 'SELECT "Payload" FROM "MigrationSmokeSentinel" WHERE "Id" = 1;')" != 'preserve-me' ]]; then
   echo 'Existing database sentinel data was not preserved.' >&2
+  exit 1
+fi
+if [[ "$(psql_exec "${EXISTING_DB}" "SELECT COUNT(*) FROM \"__EFMigrationsHistory\";")" -lt 1 ]]; then
+  echo 'Existing database was not adopted into EF migration history.' >&2
   exit 1
 fi
 
