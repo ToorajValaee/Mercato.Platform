@@ -16,6 +16,7 @@ PRICE = float(os.environ.get("MERCATO_RUNTIME_PRODUCT_PRICE", "42.50"))
 STOCK = int(os.environ.get("MERCATO_RUNTIME_PRODUCT_STOCK", "17"))
 CATEGORY_ID = os.environ.get("MERCATO_RUNTIME_CATEGORY_ID", "55555555-5555-5555-5555-555555555555")
 CATEGORY_NAME = os.environ.get("MERCATO_RUNTIME_CATEGORY_NAME", "Runtime Category")
+CHECKOUT_FAILURES = max(0, int(os.environ.get("MERCATO_RUNTIME_CHECKOUT_FAILURES", "0")))
 
 BRANCHES = [
     {"id": DEFAULT_BRANCH_ID, "name": "Runtime Main Branch", "address": "Runtime address 1"},
@@ -41,6 +42,7 @@ def catalog(branch_id=None):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "MercatoRuntimeStub/1.0"
+    checkout_attempts = 0
 
     def log_message(self, fmt, *args):
         print("mercato-stub:", fmt % args, flush=True)
@@ -94,10 +96,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/pos/checkout":
+            type(self).checkout_attempts += 1
+            print("checkout-payload:", json.dumps(payload, sort_keys=True), flush=True)
+            if type(self).checkout_attempts <= CHECKOUT_FAILURES:
+                self._json(503, {"error": "simulated_checkout_failure"})
+                return
             self._json(200, {
                 "transactionId": "44444444-4444-4444-4444-444444444444",
                 "idempotencyKey": payload.get("idempotencyKey"),
-                "externalOrderId": payload.get("externalOrderId"),
             })
             return
 
