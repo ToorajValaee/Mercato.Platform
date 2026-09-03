@@ -6,6 +6,7 @@ namespace Mercato.Infrastructure.Data;
 public static class DatabaseInitializer
 {
     private const int MaxAttempts = 5;
+    private const string EfProductVersion = "10.0.0";
 
     public static async Task InitializeAsync(MercatoDbContext context, CancellationToken cancellationToken = default)
     {
@@ -15,10 +16,23 @@ public static class DatabaseInitializer
 
             try
             {
-                var migrations = context.Database.GetMigrations();
-                if (migrations.Any()) context.Database.Migrate(); else context.Database.EnsureCreated();
+                var migrations = context.Database.GetMigrations().ToArray();
+                if (migrations.Length > 0)
+                {
+                    var appliedMigrations = (await context.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
+                    if (appliedMigrations.Length == 0 && await HasExistingMercatoSchemaAsync(context, cancellationToken))
+                    {
+                        await MarkInitialMigrationAsAppliedAsync(context, migrations[0], cancellationToken);
+                    }
 
-                context.Database.ExecuteSqlRaw("""
+                    await context.Database.MigrateAsync(cancellationToken);
+                }
+                else
+                {
+                    await context.Database.EnsureCreatedAsync(cancellationToken);
+                }
+
+                await context.Database.ExecuteSqlRawAsync("""
                     CREATE TABLE IF NOT EXISTS "UserBranchAssignments" (
                         "UserId" uuid NOT NULL,
                         "BranchId" uuid NOT NULL,
@@ -120,13 +134,73 @@ public static class DatabaseInitializer
                     INSERT INTO "ApplicationSettings" ("Key","Value") VALUES ('System.Language','en') ON CONFLICT ("Key") DO NOTHING;
                     INSERT INTO "ApplicationSettings" ("Key","Value") VALUES ('Pos.ShowProductImages','false') ON CONFLICT ("Key") DO NOTHING;
                     INSERT INTO "ApplicationSettings" ("Key","Value") VALUES ('Auth.UseUsername','false') ON CONFLICT ("Key") DO NOTHING;
-                    """);
+                    """, cancellationToken);
 
                 return;
             }
             catch (Exception exception) when (attempt < MaxAttempts && IsTransient(exception) && !cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(attempt), cancellationToken);
+            }
+        }
+    }
+
+    private static async Task<bool> HasExistingMercatoSchemaAsync(MercatoDbContext context, CancellationToken cancellationToken)
+    {
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = new NpgsqlCommand("SELECT to_regclass('\"Products\"') IS NOT NULL;", connection);
+            return await command.ExecuteScalarAsync(cancellationToken) is true;
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private static async Task MarkInitialMigrationAsAppliedAsync(
+        MercatoDbContext context,
+        string migrationId,
+        CancellationToken cancellationToken)
+    {
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = new NpgsqlCommand("""
+                CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                    "MigrationId" character varying(150) NOT NULL,
+                    "ProductVersion" character varying(32) NOT NULL,
+                    CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
+                );
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES (@migrationId, @productVersion)
+                ON CONFLICT ("MigrationId") DO NOTHING;
+                """, connection);
+            command.Parameters.AddWithValue("migrationId", migrationId);
+            command.Parameters.AddWithValue("productVersion", EfProductVersion);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
             }
         }
     }
