@@ -2,9 +2,7 @@ using Mercato.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Minio;
 using Minio.DataModel.Args;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace Mercato.Infrastructure.Storage;
 
@@ -43,11 +41,10 @@ public sealed class MinioProductMediaStorage : IProductMediaStorage
         if (source.Length == 0 || source.Length > MaxUploadBytes)
             throw new InvalidOperationException("Product image must be between 1 byte and 12 MB.");
 
-        source.Position = 0;
-        using var image = await Image.LoadAsync(source, cancellationToken);
-        if (image.Width > 10000 || image.Height > 10000)
-            throw new InvalidOperationException("Product image dimensions are too large.");
-        image.Mutate(x => x.AutoOrient());
+        var bytes = source.ToArray();
+        using var bitmap = SKBitmap.Decode(bytes) ?? throw new InvalidOperationException("The uploaded file is not a supported image.");
+        if (bitmap.Width <= 0 || bitmap.Height <= 0 || bitmap.Width > 10000 || bitmap.Height > 10000)
+            throw new InvalidOperationException("Product image dimensions are invalid or too large.");
 
         await EnsureBucketAsync(cancellationToken);
         var id = Guid.NewGuid().ToString("N");
@@ -64,13 +61,18 @@ public sealed class MinioProductMediaStorage : IProductMediaStorage
             .WithObjectSize(source.Length)
             .WithContentType(string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType), cancellationToken);
 
-        using var thumbnail = image.Clone(ctx => ctx.Resize(new ResizeOptions
-        {
-            Size = new Size(480, 480),
-            Mode = ResizeMode.Max
-        }));
+        var scale = Math.Min(1d, Math.Min(480d / bitmap.Width, 480d / bitmap.Height));
+        var width = Math.Max(1, (int)Math.Round(bitmap.Width * scale));
+        var height = Math.Max(1, (int)Math.Round(bitmap.Height * scale));
+        using var thumbnail = bitmap.Resize(
+            new SKImageInfo(width, height, bitmap.ColorType, bitmap.AlphaType),
+            new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear))
+            ?? throw new InvalidOperationException("Could not generate product thumbnail.");
+        using var thumbnailImage = SKImage.FromBitmap(thumbnail);
+        using var encoded = thumbnailImage.Encode(SKEncodedImageFormat.Webp, 82)
+            ?? throw new InvalidOperationException("Could not encode product thumbnail.");
         await using var thumbStream = new MemoryStream();
-        await thumbnail.SaveAsync(thumbStream, new WebpEncoder { Quality = 82 }, cancellationToken);
+        encoded.SaveTo(thumbStream);
         thumbStream.Position = 0;
         await _client.PutObjectAsync(new PutObjectArgs()
             .WithBucket(_bucket)
@@ -80,8 +82,8 @@ public sealed class MinioProductMediaStorage : IProductMediaStorage
             .WithContentType("image/webp"), cancellationToken);
 
         return new ProductMediaResult(
-            $"/api/media/{Uri.EscapeDataString(originalName)}",
-            $"/api/media/{Uri.EscapeDataString(thumbnailName)}");
+            $"/api/media/{originalName}",
+            $"/api/media/{thumbnailName}");
     }
 
     public async Task<StoredMedia?> OpenAsync(string objectName, CancellationToken cancellationToken = default)
@@ -94,7 +96,7 @@ public sealed class MinioProductMediaStorage : IProductMediaStorage
             await _client.GetObjectAsync(new GetObjectArgs()
                 .WithBucket(_bucket)
                 .WithObject(objectName)
-                .WithCallbackStream(async source => await source.CopyToAsync(stream, cancellationToken)), cancellationToken);
+                .WithCallbackStream(source => source.CopyTo(stream)), cancellationToken);
             stream.Position = 0;
             return new StoredMedia(stream, stat.ContentType ?? "application/octet-stream");
         }
