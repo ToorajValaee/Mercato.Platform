@@ -32,6 +32,7 @@ public sealed class SettingsController : ControllerBase
         {
             systemLanguage = settings.GetValueOrDefault("System.Language", "en"),
             posShowProductImages = bool.TryParse(settings.GetValueOrDefault("Pos.ShowProductImages"), out var show) && show,
+            useUsername = bool.TryParse(settings.GetValueOrDefault("Auth.UseUsername"), out var useUsername) && useUsername,
             paymentMethods = await _paymentMethods.GetAllAsync(true, cancellationToken),
             discounts = await _discounts.GetAllAsync(true, cancellationToken)
         });
@@ -46,6 +47,7 @@ public sealed class SettingsController : ControllerBase
         {
             systemLanguage = settings.GetValueOrDefault("System.Language", "en"),
             posShowProductImages = bool.TryParse(settings.GetValueOrDefault("Pos.ShowProductImages"), out var show) && show,
+            useUsername = bool.TryParse(settings.GetValueOrDefault("Auth.UseUsername"), out var useUsername) && useUsername,
             paymentMethods = await _paymentMethods.GetAllAsync(false, cancellationToken),
             discounts = await _discounts.GetAllAsync(false, cancellationToken)
         });
@@ -56,11 +58,11 @@ public sealed class SettingsController : ControllerBase
     public async Task<IActionResult> UpdateSettings(UpdateApplicationSettingsRequest request, CancellationToken cancellationToken)
     {
         var language = request.SystemLanguage?.Trim().ToLowerInvariant();
-        if (language is not ("en" or "fa"))
-            return BadRequest(new { error = "System language must be en or fa." });
+        if (language is not ("en" or "fa")) return BadRequest(new { error = "System language must be en or fa." });
 
         await UpsertAsync("System.Language", language, cancellationToken);
         await UpsertAsync("Pos.ShowProductImages", request.PosShowProductImages.ToString().ToLowerInvariant(), cancellationToken);
+        await UpsertAsync("Auth.UseUsername", request.UseUsername.ToString().ToLowerInvariant(), cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -69,13 +71,8 @@ public sealed class SettingsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreatePaymentMethod(PaymentMethodRequest request, CancellationToken cancellationToken)
     {
-        var error = ValidateName(request.Name);
-        if (error is not null) return BadRequest(new { error });
-        try
-        {
-            var created = await _paymentMethods.AddAsync(new PaymentMethod { Id = Guid.NewGuid(), Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
-            return Ok(created);
-        }
+        var error = ValidateName(request.Name); if (error is not null) return BadRequest(new { error });
+        try { return Ok(await _paymentMethods.AddAsync(new PaymentMethod { Id = Guid.NewGuid(), Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken)); }
         catch (DbUpdateException) { return Conflict(new { error = "A payment method with this name already exists." }); }
     }
 
@@ -83,13 +80,8 @@ public sealed class SettingsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdatePaymentMethod(Guid id, PaymentMethodRequest request, CancellationToken cancellationToken)
     {
-        var error = ValidateName(request.Name);
-        if (error is not null) return BadRequest(new { error });
-        try
-        {
-            var updated = await _paymentMethods.UpdateAsync(new PaymentMethod { Id = id, Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
-            return updated is null ? NotFound() : Ok(updated);
-        }
+        var error = ValidateName(request.Name); if (error is not null) return BadRequest(new { error });
+        try { var updated = await _paymentMethods.UpdateAsync(new PaymentMethod { Id = id, Name = request.Name.Trim(), IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken); return updated is null ? NotFound() : Ok(updated); }
         catch (DbUpdateException) { return Conflict(new { error = "A payment method with this name already exists." }); }
     }
 
@@ -103,11 +95,7 @@ public sealed class SettingsController : ControllerBase
     public async Task<IActionResult> CreateDiscount(DiscountRequest request, CancellationToken cancellationToken)
     {
         var validation = ValidateDiscount(request); if (validation is not null) return BadRequest(new { error = validation });
-        try
-        {
-            var created = await _discounts.AddAsync(new DiscountDefinition { Id = Guid.NewGuid(), Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type), Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
-            return Ok(created);
-        }
+        try { return Ok(await _discounts.AddAsync(new DiscountDefinition { Id = Guid.NewGuid(), Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type), Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken)); }
         catch (DbUpdateException) { return Conflict(new { error = "A discount with this name already exists." }); }
     }
 
@@ -116,11 +104,7 @@ public sealed class SettingsController : ControllerBase
     public async Task<IActionResult> UpdateDiscount(Guid id, DiscountRequest request, CancellationToken cancellationToken)
     {
         var validation = ValidateDiscount(request); if (validation is not null) return BadRequest(new { error = validation });
-        try
-        {
-            var updated = await _discounts.UpdateAsync(new DiscountDefinition { Id = id, Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type), Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken);
-            return updated is null ? NotFound() : Ok(updated);
-        }
+        try { var updated = await _discounts.UpdateAsync(new DiscountDefinition { Id = id, Name = request.Name.Trim(), Type = NormalizeDiscountType(request.Type), Value = request.Value, IsActive = request.IsActive, SortOrder = request.SortOrder }, cancellationToken); return updated is null ? NotFound() : Ok(updated); }
         catch (DbUpdateException) { return Conflict(new { error = "A discount with this name already exists." }); }
     }
 
@@ -145,7 +129,7 @@ public sealed class SettingsController : ControllerBase
     }
     private static string NormalizeDiscountType(string? type) => type?.Trim().Equals("fixed", StringComparison.OrdinalIgnoreCase) == true ? "Fixed" : type?.Trim().Equals("percent", StringComparison.OrdinalIgnoreCase) == true ? "Percent" : type?.Trim() ?? string.Empty;
 
-    public sealed record UpdateApplicationSettingsRequest(string SystemLanguage, bool PosShowProductImages);
+    public sealed record UpdateApplicationSettingsRequest(string SystemLanguage, bool PosShowProductImages, bool UseUsername = false);
     public sealed record PaymentMethodRequest(string Name, bool IsActive, int SortOrder);
     public sealed record DiscountRequest(string Name, string Type, decimal Value, bool IsActive, int SortOrder);
 }
