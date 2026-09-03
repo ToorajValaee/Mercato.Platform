@@ -31,14 +31,19 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password)) return BadRequest();
+        // `identifier` is the canonical login field used by the frontend. `email` remains
+        // accepted as a compatibility alias for older clients and runtime scripts.
+        var identifier = !string.IsNullOrWhiteSpace(request.Identifier) ? request.Identifier : request.Email;
+        if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { error = "Login identifier and password are required." });
+
         try
         {
-            var user = await _authService.LoginAsync(request.Email, request.Password, cancellationToken);
+            var user = await _authService.LoginAsync(identifier, request.Password, cancellationToken);
             var token = CreateToken(user);
             return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.Role, user.CanAccessBackOffice } });
         }
-        catch (UnauthorizedAccessException) { return Unauthorized(); }
+        catch (UnauthorizedAccessException) { return Unauthorized(new { error = "Invalid login credentials." }); }
     }
 
     private string CreateToken(AuthenticatedUser user)
@@ -67,7 +72,6 @@ public class AuthController : ControllerBase
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    // Email remains the JSON property name for compatibility. It carries the configured login identifier.
-    public record LoginRequest(string Email, string Password);
+    public record LoginRequest(string? Identifier, string? Email, string Password);
     public record RegisterRequest(string Email, string Password);
 }
