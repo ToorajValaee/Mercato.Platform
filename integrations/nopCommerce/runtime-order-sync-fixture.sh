@@ -10,7 +10,7 @@ fi
 # runtime-order-sync-smoke.sh deliberately uses BillingAddressId=0 for its synthetic
 # order. A real nopCommerce Order requires that FK to resolve, so provide the
 # minimal valid address fixture before creating the paid order.
-docker exec "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d nopcommerce <<'SQL'
+docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d nopcommerce <<'SQL'
 INSERT INTO "Address" (
   "Id", "FirstName", "LastName", "Email", "CreatedOnUtc"
 )
