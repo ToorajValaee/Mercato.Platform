@@ -2,6 +2,16 @@ name: nopCommerce 4.90.7 Regression
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'integrations/nopCommerce/**'
+      - '.github/workflows/nopcommerce-ci.yml'
+      - 'docs/Mercato.Platform.Specification.md'
+  pull_request:
+    paths:
+      - 'integrations/nopCommerce/**'
+      - '.github/workflows/nopcommerce-ci.yml'
+      - 'docs/Mercato.Platform.Specification.md'
 
 concurrency:
   group: nopcommerce-regression-${{ github.ref }}
@@ -70,6 +80,7 @@ jobs:
         id: nop_storefront_runtime
         env:
           NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+          NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
         run: bash integrations/nopCommerce/runtime-config-smoke.sh
 
       - name: Diagnose nopCommerce runtime failure
