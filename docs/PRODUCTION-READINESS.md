@@ -48,18 +48,16 @@ JWT signing keys must be high-entropy secrets and must not be committed to the r
 
 ## Database migrations
 
-**Release blocker:** a production EF Core migration baseline is still required.
+The EF Core 10 migration baseline is committed as `20260903155225_InitialBaseline` together with its designer and `MercatoDbContextModelSnapshot`.
 
-Current startup supports fresh development creation and additive compatibility updates. This is not the final production schema-upgrade strategy. Before the first production release:
+Database initialization now uses the committed migration history. For a fresh PostgreSQL database, EF applies the baseline normally. For an existing Mercato schema that predates migration history, startup detects the established Mercato schema, creates/stamps the EF migration history for the initial baseline, and then continues with normal migrations instead of attempting to recreate existing tables.
 
-- generate the initial migration from `MercatoDbContext` using EF Core 10 tooling;
-- commit the migration and model snapshot;
-- validate migration creation against an empty PostgreSQL 16 database;
-- validate the transition for existing local/development databases that were created by `EnsureCreated`;
-- make startup use the reviewed migration history without attempting to recreate existing tables;
-- test at least one forward migration from the baseline to a subsequent schema change.
+Core/POS CI runs `backend/migration-smoke.sh` against PostgreSQL 16 and validates both supported transition paths:
 
-Do not delete persistent volumes as a migration strategy.
+- an empty database receives the initial migration and expected core tables such as `Products` and `Branches`;
+- an existing Mercato schema with its migration-history table removed is adopted into the baseline, starts successfully through the normal API initializer, retains an unrelated sentinel row, and records the baseline in `__EFMigrationsHistory`.
+
+Future model changes must be delivered as reviewed forward EF migrations and must continue to pass the same migration regression. Do not use `EnsureCreated`, table recreation, or persistent-volume deletion as a production schema-upgrade strategy.
 
 ## Persistence and backups
 
@@ -68,43 +66,55 @@ Back up both persistent data sets:
 - PostgreSQL (`mercato_pgdata`): authoritative business, inventory, order, accounting, settlement, user, and configuration data;
 - MinIO (`mercato_minio_data`): product/media objects.
 
-A production release is not operationally ready until restore procedures for both stores have been tested. Backup frequency and retention are deployment/operator decisions and should match the business recovery requirements.
+A production deployment is not operationally ready until restore procedures for both stores have been tested. Backup frequency and retention are deployment/operator decisions and should match the business recovery requirements.
 
 ## Authentication and authorization
 
-Before release, verify:
+Before release/deployment, verify production configuration for:
 
-- JWT issuer, audience, key, and expiry behavior use production settings;
-- Admin-only APIs remain server-authorized;
-- Manager/Cashier branch restrictions are enforced server-side;
-- Back Office access is independent from branch assignment and cannot be enabled by client-side UI changes;
-- username/email authentication-mode transitions cannot lock out all Admin users;
-- malformed password hashes fail authentication without causing request failures.
+- JWT issuer, audience, key, and expiry behavior;
+- Admin-only APIs remaining server-authorized;
+- Manager/Cashier branch restrictions remaining enforced server-side;
+- Back Office access remaining independent from branch assignment and not enableable by client-side UI changes;
+- username/email authentication-mode transitions not locking out all Admin users;
+- malformed password hashes failing authentication without causing request failures.
+
+The repository regression suite covers the relevant application authorization and password-hash behavior; deployment operators remain responsible for supplying the production settings and credentials.
 
 ## nopCommerce integration
 
 Production nopCommerce must run the exact supported target: **nopCommerce 4.90.7 / .NET 9** unless a separately tested upgrade is approved.
 
-Before release, the authoritative nop regression must pass all of these against a clean official 4.90.7 installation:
+The authoritative nopCommerce regression checks out the official `release-4.90.7` source and validates:
 
-- plugin compilation and installation;
+- all five Mercato plugins compile against the native nopCommerce target and install on a clean instance;
 - Connector configuration consumption;
 - BranchSelector storefront behavior;
-- Product and category synchronization;
-- Inventory synchronization;
+- product and category synchronization;
+- inventory synchronization;
 - paid-order synchronization;
 - failed paid-order retry with stable `nop:{orderId}` idempotency key;
 - durable `Mercato.OrderSyncedUtc` marker and no duplicate retry after success;
 - final native plugin package staging and artifact upload.
 
-## Final release gate
+## Repository release gate
 
-The project can be called release-ready only when:
+The repository can be called code/release-ready only when, on the exact same final revision:
 
-- Core/POS/Back Office CI is green on the release revision;
-- nopCommerce 4.90.7 regression is green on the corresponding integration revision;
-- EF migration baseline and upgrade path are validated;
-- production secrets are provided outside source control;
-- TLS/reverse proxy and network isolation are configured;
-- PostgreSQL and MinIO backup/restore procedures are validated;
-- unresolved business-policy choices required by the intended deployment (for example tax/fiscal rules) have either been explicitly defined or confirmed out of scope.
+- Core/POS/Back Office CI is green, including fresh/existing database migration validation, POS runtime smoke, frontend build/typecheck, and backend tests;
+- nopCommerce 4.90.7 regression is green and produces the native plugin package artifact;
+- the committed EF migration baseline and compatibility path remain present;
+- the source-of-truth specification and this readiness document reflect the shipped state.
+
+## Deployment/operator gate
+
+After the repository release gate is green, an actual production deployment still requires operator/environment work:
+
+- provide real production secrets outside source control;
+- configure HTTPS/reverse proxy and network isolation;
+- perform and verify PostgreSQL backup/restore;
+- perform and verify MinIO backup/restore;
+- run deployment-specific acceptance with the intended administrator/staff accounts and connected nopCommerce instance;
+- define any jurisdiction/deployment-specific business policies that are required in that environment (for example tax/fiscal rules) or explicitly keep them out of scope.
+
+Repository CI cannot prove these environment-specific controls on behalf of the deployment operator.
