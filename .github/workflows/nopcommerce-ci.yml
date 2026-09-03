@@ -102,7 +102,7 @@ jobs:
         env:
           NOP_ROOT: ${{ github.workspace }}/_nopCommerce
           NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
-        run: bash integrations/nopCommerce/runtime-order-sync-smoke.sh
+        run: bash integrations/nopCommerce/runtime-order-sync-fixture.sh
 
       - name: Diagnose nopCommerce runtime failure
         if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure' || steps.nop_sync_runtime.outcome == 'failure' || steps.nop_order_sync_runtime.outcome == 'failure')
