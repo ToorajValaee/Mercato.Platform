@@ -9,11 +9,14 @@ mkdir -p "$WORK_DIR"; rm -f "$WORK_DIR"/*.json "$WORK_DIR"/*.html 2>/dev/null ||
 
 for _ in {1..90}; do curl -fsS --max-time 3 "$BASE_URL/health" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS --max-time 10 "$BASE_URL/health" >/dev/null
-curl -fsS "$BASE_URL/" -o "$WORK_DIR/home.html"; grep -q '<title>Mercato</title>' "$WORK_DIR/home.html"
-curl -fsS "$BASE_URL/pos/" -o "$WORK_DIR/pos.html"; grep -q '<title>Mercato POS</title>' "$WORK_DIR/pos.html"; grep -q '/favicon.svg' "$WORK_DIR/pos.html"; grep -q '/assets/' "$WORK_DIR/pos.html"
-curl -fsS "$BASE_URL/admin/" -o "$WORK_DIR/admin.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin.html"; grep -q '/favicon.svg' "$WORK_DIR/admin.html"; grep -q '/assets/' "$WORK_DIR/admin.html"
+curl -fsS "$BASE_URL/" -o "$WORK_DIR/home.html"; grep -q '<title>Mercato</title>' "$WORK_DIR/home.html"; grep -q '/favicon.svg' "$WORK_DIR/home.html"; grep -q '/assets/' "$WORK_DIR/home.html"
+curl -fsS "$BASE_URL/pos/" -o "$WORK_DIR/pos.html"; grep -q '<title>Mercato POS</title>' "$WORK_DIR/pos.html"; grep -q '/favicon-pos.svg' "$WORK_DIR/pos.html"; grep -q '/assets/' "$WORK_DIR/pos.html"
+curl -fsS "$BASE_URL/admin/" -o "$WORK_DIR/admin.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin.html"; grep -q '/favicon-admin.svg' "$WORK_DIR/admin.html"; grep -q '/assets/' "$WORK_DIR/admin.html"
 curl -fsS "$BASE_URL/admin/products" -o "$WORK_DIR/admin-route.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin-route.html"
 curl -fsS "$BASE_URL/favicon.svg" >/dev/null
+curl -fsS "$BASE_URL/favicon-admin.svg" >/dev/null
+curl -fsS "$BASE_URL/favicon-pos.svg" >/dev/null
+curl -fsS "$BASE_URL/launcher-hero.svg" >/dev/null
 curl -fsS "$BASE_URL/admin-login-hero.svg" >/dev/null
 curl -fsS "$BASE_URL/pos-login-hero.svg" >/dev/null
 curl -fsS "$BASE_URL/locales/fa.json" -o "$WORK_DIR/fa.json"; python3 -m json.tool "$WORK_DIR/fa.json" >/dev/null
@@ -94,6 +97,7 @@ import json,sys
 d=json.load(open(sys.argv[1])); p=next((x for x in d if int(x.get('availableQuantity') or 0)>=2),None); assert p; print(p['productId'],p['availableQuantity'])
 PY
 )
+
 IDEMPOTENCY_KEY="pos-smoke-$(date +%s)-$RANDOM"; REQUEST_JSON="{\"branchId\":\"$BRANCH_ID\",\"customerId\":\"00000000-0000-0000-0000-000000000000\",\"paymentMethod\":\"Cash\",\"idempotencyKey\":\"$IDEMPOTENCY_KEY\",\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":2}]}"
 curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -d "$REQUEST_JSON" "$BASE_URL/api/pos/checkout" -o "$WORK_DIR/checkout.json"
 ORDER_ID="$(python3 - "$WORK_DIR/checkout.json" <<'PY'
@@ -133,4 +137,4 @@ d=json.load(open(sys.argv[1])); p=next(x for x in d if x['productId']==sys.argv[
 PY
 curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/staff/$STAFF_ID" >/dev/null
 
-echo "Mercato runtime smoke passed: compiled React frontends, SPA routing, localization, auth modes, branch access, POS sale/replay/return, and stock reconciliation."
+echo "Mercato runtime smoke passed: separated responsive frontend, launcher branding, distinct favicons, localized UI, auth modes, branch access, POS sale/replay/return, and stock reconciliation."
