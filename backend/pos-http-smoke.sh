@@ -5,19 +5,19 @@ BASE_URL="${MERCATO_POS_BASE_URL:-http://127.0.0.1:5081}"
 ADMIN_EMAIL="${MERCATO_POS_ADMIN_EMAIL:-admin@mercato.local}"
 ADMIN_PASSWORD="${MERCATO_POS_ADMIN_PASSWORD:-MercatoLocal123!}"
 WORK_DIR="${RUNNER_TEMP:-/tmp}/mercato-pos-http"
-mkdir -p "$WORK_DIR"; rm -f "$WORK_DIR"/*.json "$WORK_DIR"/*.html "$WORK_DIR"/*.js 2>/dev/null || true
+mkdir -p "$WORK_DIR"; rm -f "$WORK_DIR"/*.json "$WORK_DIR"/*.html 2>/dev/null || true
 
 for _ in {1..90}; do curl -fsS --max-time 3 "$BASE_URL/health" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS --max-time 10 "$BASE_URL/health" >/dev/null
 curl -fsS "$BASE_URL/" -o "$WORK_DIR/home.html"; grep -q '<title>Mercato</title>' "$WORK_DIR/home.html"
-curl -fsS "$BASE_URL/pos/" -o "$WORK_DIR/pos.html"; grep -q '<title>Mercato POS</title>' "$WORK_DIR/pos.html"; grep -q '/ui-fixes.js' "$WORK_DIR/pos.html"; grep -q '/api/branches/accessible' "$WORK_DIR/pos.html"
-curl -fsS "$BASE_URL/admin/" -o "$WORK_DIR/admin.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin.html"; grep -q '/admin/favicon.svg' "$WORK_DIR/admin.html"; grep -q '/ui-fixes.js' "$WORK_DIR/admin.html"; grep -q 'salesChart' "$WORK_DIR/admin.html"; grep -q 'staffBranches' "$WORK_DIR/admin.html"; grep -q 'pager' "$WORK_DIR/admin.html"
-curl -fsS "$BASE_URL/admin/favicon.svg" >/dev/null
-curl -fsS "$BASE_URL/admin/login-hero.svg" >/dev/null
-curl -fsS "$BASE_URL/pos/login-hero.svg" >/dev/null
-curl -fsS "$BASE_URL/mercato-ui.js" -o "$WORK_DIR/ui.js"; grep -q 'fa-IR-u-ca-persian' "$WORK_DIR/ui.js"; grep -q 'jalaliToLocalDateTime' "$WORK_DIR/ui.js"; grep -q 'return 31' "$WORK_DIR/ui.js"
-curl -fsS "$BASE_URL/ui-fixes.js" -o "$WORK_DIR/ui-fixes.js"; grep -q 'useUsername' "$WORK_DIR/ui-fixes.js"; grep -q 'print-powered' "$WORK_DIR/ui-fixes.js"
+curl -fsS "$BASE_URL/pos/" -o "$WORK_DIR/pos.html"; grep -q '<title>Mercato POS</title>' "$WORK_DIR/pos.html"; grep -q '/favicon.svg' "$WORK_DIR/pos.html"; grep -q '/assets/' "$WORK_DIR/pos.html"
+curl -fsS "$BASE_URL/admin/" -o "$WORK_DIR/admin.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin.html"; grep -q '/favicon.svg' "$WORK_DIR/admin.html"; grep -q '/assets/' "$WORK_DIR/admin.html"
+curl -fsS "$BASE_URL/admin/products" -o "$WORK_DIR/admin-route.html"; grep -q '<title>Mercato Back Office</title>' "$WORK_DIR/admin-route.html"
+curl -fsS "$BASE_URL/favicon.svg" >/dev/null
+curl -fsS "$BASE_URL/admin-login-hero.svg" >/dev/null
+curl -fsS "$BASE_URL/pos-login-hero.svg" >/dev/null
 curl -fsS "$BASE_URL/locales/fa.json" -o "$WORK_DIR/fa.json"; python3 -m json.tool "$WORK_DIR/fa.json" >/dev/null
+curl -fsS "$BASE_URL/locales/en.json" -o "$WORK_DIR/en.json"; python3 -m json.tool "$WORK_DIR/en.json" >/dev/null
 
 curl -fsS "$BASE_URL/api/settings/public" -o "$WORK_DIR/public-settings.json"
 python3 - "$WORK_DIR/public-settings.json" <<'PY'
@@ -48,7 +48,6 @@ PY
 )"
 curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/categories/$CATEGORY_ID" >/dev/null
 
-# Default email-login mode: email is required; role, Back Office access, and branch assignment remain independent.
 STAFF_EMAIL="runtime-cashier-${RANDOM}@mercato.local"; STAFF_PASSWORD='RuntimeCashier123!'
 curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -d "{\"email\":\"$STAFF_EMAIL\",\"username\":null,\"password\":\"$STAFF_PASSWORD\",\"role\":\"Cashier\",\"canAccessBackOffice\":false,\"branchIds\":[\"$BRANCH_ID\"]}" "$BASE_URL/api/staff" -o "$WORK_DIR/staff.json"
 STAFF_ID="$(python3 - "$WORK_DIR/staff.json" "$BRANCH_ID" "$STAFF_EMAIL" <<'PY'
@@ -68,7 +67,6 @@ import json,sys
 d=json.load(open(sys.argv[1])); assert [x['id'] for x in d]==[sys.argv[2]], d
 PY
 
-# Username-login mode seeds existing usernames from email and accepts username-only staff.
 curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -X PUT -d '{"systemLanguage":"en","posShowProductImages":false,"useUsername":true}' "$BASE_URL/api/settings" >/dev/null
 curl -fsS -H 'Content-Type: application/json' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" "$BASE_URL/api/auth/login" -o "$WORK_DIR/admin-username-login.json"
 python3 - "$WORK_DIR/admin-username-login.json" "$ADMIN_EMAIL" <<'PY'
@@ -96,7 +94,6 @@ import json,sys
 d=json.load(open(sys.argv[1])); p=next((x for x in d if int(x.get('availableQuantity') or 0)>=2),None); assert p; print(p['productId'],p['availableQuantity'])
 PY
 )
-
 IDEMPOTENCY_KEY="pos-smoke-$(date +%s)-$RANDOM"; REQUEST_JSON="{\"branchId\":\"$BRANCH_ID\",\"customerId\":\"00000000-0000-0000-0000-000000000000\",\"paymentMethod\":\"Cash\",\"idempotencyKey\":\"$IDEMPOTENCY_KEY\",\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":2}]}"
 curl -fsS "${AUTH[@]}" -H 'Content-Type: application/json' -d "$REQUEST_JSON" "$BASE_URL/api/pos/checkout" -o "$WORK_DIR/checkout.json"
 ORDER_ID="$(python3 - "$WORK_DIR/checkout.json" <<'PY'
@@ -136,4 +133,4 @@ d=json.load(open(sys.argv[1])); p=next(x for x in d if x['productId']==sys.argv[
 PY
 curl -fsS "${AUTH[@]}" -X DELETE "$BASE_URL/api/staff/$STAFF_ID" >/dev/null
 
-echo "Mercato runtime smoke passed: localized UI, Persian calendar source, favicon/login art, email/username auth modes, branch access, POS sale/replay/return, and stock reconciliation."
+echo "Mercato runtime smoke passed: compiled React frontends, SPA routing, localization, auth modes, branch access, POS sale/replay/return, and stock reconciliation."
