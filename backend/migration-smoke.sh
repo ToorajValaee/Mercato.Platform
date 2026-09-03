@@ -46,7 +46,7 @@ apply_ef_migrations() {
 assert_baseline_applied() {
   local db="$1"
   local count
-  count="$(psql_exec "${db}" 'SELECT COUNT(*) FROM "__EFMigrationsHistory" WHERE "MigrationId" LIKE ''%_InitialBaseline'';')"
+  count="$(psql_exec "${db}" "SELECT COUNT(*) FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" LIKE '%_InitialBaseline';")"
   if [[ "${count}" -lt 1 ]]; then
     echo "InitialBaseline was not recorded in ${db}." >&2
     exit 1
@@ -57,7 +57,7 @@ echo '== Fresh database migration =='
 reset_database "${FRESH_DB}"
 apply_ef_migrations "${FRESH_DB}"
 assert_baseline_applied "${FRESH_DB}"
-if [[ "$(psql_exec "${FRESH_DB}" 'SELECT to_regclass(''\"Products\"'') IS NOT NULL;')" != 't' ]]; then
+if [[ "$(psql_exec "${FRESH_DB}" "SELECT to_regclass('\"Products\"') IS NOT NULL;")" != 't' ]]; then
   echo 'Fresh migration did not create Products.' >&2
   exit 1
 fi
