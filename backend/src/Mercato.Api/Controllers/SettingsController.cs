@@ -60,6 +60,26 @@ public sealed class SettingsController : ControllerBase
         var language = request.SystemLanguage?.Trim().ToLowerInvariant();
         if (language is not ("en" or "fa")) return BadRequest(new { error = "System language must be en or fa." });
 
+        var staff = await _db.Users.Where(x => x.Role == "Admin" || x.Role == "Manager" || x.Role == "Cashier").ToListAsync(cancellationToken);
+        if (request.UseUsername)
+        {
+            foreach (var user in staff.Where(x => string.IsNullOrWhiteSpace(x.Username)))
+            {
+                if (string.IsNullOrWhiteSpace(user.Email))
+                    return BadRequest(new { error = "Every staff account needs a username before username login can be enabled." });
+                user.Username = user.Email.Trim();
+            }
+            var duplicate = staff.Where(x => !string.IsNullOrWhiteSpace(x.Username))
+                .GroupBy(x => x.Username!, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(x => x.Count() > 1);
+            if (duplicate is not null)
+                return BadRequest(new { error = $"Username '{duplicate.Key}' is duplicated. Resolve it before enabling username login." });
+        }
+        else if (staff.Any(x => string.IsNullOrWhiteSpace(x.Email)))
+        {
+            return BadRequest(new { error = "Every staff account needs an email before email login can be enabled." });
+        }
+
         await UpsertAsync("System.Language", language, cancellationToken);
         await UpsertAsync("Pos.ShowProductImages", request.PosShowProductImages.ToString().ToLowerInvariant(), cancellationToken);
         await UpsertAsync("Auth.UseUsername", request.UseUsername.ToString().ToLowerInvariant(), cancellationToken);
