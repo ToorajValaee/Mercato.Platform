@@ -44,6 +44,28 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+// The current Back Office and POS are static browser applications. Inject the
+// shared stabilization layer without duplicating the large pages themselves.
+app.Use(async (context, next) =>
+{
+    if (HttpMethods.IsGet(context.Request.Method) &&
+        (context.Request.Path.Equals("/admin/") || context.Request.Path.Equals("/admin/index.html") ||
+         context.Request.Path.Equals("/pos/") || context.Request.Path.Equals("/pos/index.html")))
+    {
+        var area = context.Request.Path.StartsWithSegments("/admin") ? "admin" : "pos";
+        var file = Path.Combine(app.Environment.WebRootPath, area, "index.html");
+        if (File.Exists(file))
+        {
+            var html = await File.ReadAllTextAsync(file, context.RequestAborted);
+            html = html.Replace("</body>", "<script src=\"/ui-fixes.js\"></script></body>", StringComparison.OrdinalIgnoreCase);
+            context.Response.ContentType = "text/html; charset=utf-8";
+            await context.Response.WriteAsync(html, context.RequestAborted);
+            return;
+        }
+    }
+    await next();
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
