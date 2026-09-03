@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<ISalesReturnRepository, SalesReturnRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IApplicationSettingRepository, ApplicationSettingRepository>();
         services.AddScoped<IPaymentMethodRepository, PaymentMethodRepository>();
         services.AddScoped<IDiscountRepository, DiscountRepository>();
         services.AddSingleton<IProductMediaStorage, MinioProductMediaStorage>();
