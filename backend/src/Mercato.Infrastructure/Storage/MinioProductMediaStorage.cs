@@ -20,7 +20,7 @@ public sealed class MinioProductMediaStorage : IProductMediaStorage
         var accessKey = configuration["ObjectStorage:AccessKey"] ?? "mercato";
         var secretKey = configuration["ObjectStorage:SecretKey"] ?? "MercatoMinio123!";
         _bucket = configuration["ObjectStorage:Bucket"] ?? "mercato-media";
-        var secure = configuration.GetValue<bool>("ObjectStorage:Secure");
+        var secure = bool.TryParse(configuration["ObjectStorage:Secure"], out var configuredSecure) && configuredSecure;
 
         _client = new MinioClient()
             .WithEndpoint(endpoint)
