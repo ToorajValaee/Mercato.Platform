@@ -18,23 +18,19 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var jwt = builder.Configuration.GetSection("Jwt");
-
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt["Issuer"],
-            ValidAudience = jwt["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"] ?? string.Empty))
-        };
-    });
-
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwt["Issuer"],
+        ValidAudience = jwt["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"] ?? string.Empty))
+    };
+});
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
@@ -42,33 +38,6 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
-
-// The current Back Office and POS are static browser applications. Inject the
-// shared stabilization layer without duplicating the large pages themselves.
-app.Use(async (context, next) =>
-{
-    if (HttpMethods.IsGet(context.Request.Method) &&
-        (context.Request.Path.Equals("/admin/") || context.Request.Path.Equals("/admin/index.html") ||
-         context.Request.Path.Equals("/pos/") || context.Request.Path.Equals("/pos/index.html")))
-    {
-        var area = context.Request.Path.StartsWithSegments("/admin") ? "admin" : "pos";
-        var file = Path.Combine(app.Environment.WebRootPath, area, "index.html");
-        if (File.Exists(file))
-        {
-            var html = await File.ReadAllTextAsync(file, context.RequestAborted);
-            if (area == "admin")
-            {
-                html = html.Replace("</head>", "<link rel=\"icon\" type=\"image/svg+xml\" href=\"/admin/favicon.svg?v=2\"><link rel=\"shortcut icon\" href=\"/admin/favicon.svg?v=2\"></head>", StringComparison.OrdinalIgnoreCase);
-            }
-            html = html.Replace("</body>", "<script src=\"/ui-fixes.js?v=2\"></script></body>", StringComparison.OrdinalIgnoreCase);
-            context.Response.ContentType = "text/html; charset=utf-8";
-            await context.Response.WriteAsync(html, context.RequestAborted);
-            return;
-        }
-    }
-    await next();
-});
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
@@ -99,8 +68,7 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
-    if (configuration.GetValue<bool>("BootstrapDemoData:Enabled") &&
-        !await dbContext.Branches.AnyAsync() && !await dbContext.Products.AnyAsync())
+    if (configuration.GetValue<bool>("BootstrapDemoData:Enabled") && !await dbContext.Branches.AnyAsync() && !await dbContext.Products.AnyAsync())
     {
         var branchId = Guid.Parse("10000000-0000-0000-0000-000000000001");
         var products = new[]
@@ -110,7 +78,6 @@ using (var scope = app.Services.CreateScope())
             new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000003"), Name = "Notebook", Sku = "DEMO-NOTE", PurchasePrice = 3m, SalePrice = 9.75m },
             new Product { Id = Guid.Parse("20000000-0000-0000-0000-000000000004"), Name = "Art Print", Sku = "DEMO-PRINT", PurchasePrice = 8m, SalePrice = 24m }
         };
-
         dbContext.Branches.Add(new Branch { Id = branchId, Name = "Demo Store", Address = "Local POS demo" });
         dbContext.Products.AddRange(products);
         dbContext.StockMovements.AddRange(products.Select((product, index) => new StockMovement
@@ -124,4 +91,6 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "Mercato.Api" }));
 app.MapControllers();
+app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
+app.MapFallbackToFile("/pos/{*path:nonfile}", "pos/index.html");
 app.Run();
