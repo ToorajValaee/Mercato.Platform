@@ -60,6 +60,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_body(self):
+        transfer_encoding = self.headers.get("Transfer-Encoding", "").lower()
+        if "chunked" in transfer_encoding:
+            chunks = []
+            while True:
+                size_line = self.rfile.readline().strip()
+                if not size_line:
+                    continue
+                size = int(size_line.split(b";", 1)[0], 16)
+                if size == 0:
+                    while True:
+                        trailer = self.rfile.readline()
+                        if trailer in (b"\r\n", b"\n", b""):
+                            break
+                    break
+                chunks.append(self.rfile.read(size))
+                self.rfile.read(2)  # trailing CRLF
+            return b"".join(chunks)
+
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        return self.rfile.read(length) if length else b""
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
@@ -87,11 +109,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(401, {"error": "unauthorized"})
             return
 
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        body = self.rfile.read(length) if length else b""
+        body = self._read_body()
         try:
             payload = json.loads(body.decode("utf-8")) if body else {}
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             self._json(400, {"error": "invalid_json"})
             return
 
