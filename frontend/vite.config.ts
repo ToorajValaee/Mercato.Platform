@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
@@ -9,9 +12,9 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'index.html'),
-        admin: resolve(__dirname, 'admin/index.html'),
-        pos: resolve(__dirname, 'pos/index.html')
+        index: resolve(root, 'index.html'),
+        admin: resolve(root, 'admin/index.html'),
+        pos: resolve(root, 'pos/index.html')
       }
     }
   }
