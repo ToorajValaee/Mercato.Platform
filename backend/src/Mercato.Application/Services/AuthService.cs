@@ -20,6 +20,12 @@ public sealed class AuthService : IAuthService
         _passwordService = passwordService;
     }
 
+    // Compatibility overload for existing unit tests and direct application callers.
+    // Production DI resolves the three-argument constructor and therefore uses the
+    // persisted Auth.UseUsername setting.
+    public AuthService(IUserRepository userRepository, PasswordService passwordService)
+        : this(userRepository, new EmailModeSettings(), passwordService) { }
+
     public async Task RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = email.Trim();
@@ -48,5 +54,12 @@ public sealed class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid credentials.");
 
         return new AuthenticatedUser(user.Id, user.Email, user.Username, user.Role, user.CanAccessBackOffice);
+    }
+
+    private sealed class EmailModeSettings : IApplicationSettingRepository
+    {
+        public Task<string?> GetAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+        public Task SetAsync(string key, string value, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> GetBooleanAsync(string key, bool defaultValue = false, CancellationToken cancellationToken = default) => Task.FromResult(defaultValue);
     }
 }
