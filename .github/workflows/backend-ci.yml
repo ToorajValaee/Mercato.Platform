@@ -2,11 +2,9 @@ name: Core and POS CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 concurrency:
   group: core-pos-ci-${{ github.ref }}
@@ -15,7 +13,6 @@ concurrency:
 jobs:
   core-pos:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:16
@@ -30,7 +27,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-
     steps:
       - name: Checkout Mercato
         uses: actions/checkout@v4
@@ -40,17 +36,28 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Prepare PostgreSQL test databases
         run: |
           set -euo pipefail
           PG_CONTAINER="$(docker ps --filter "ancestor=postgres:16" --format '{{.ID}}' | head -n 1)"
           test -n "$PG_CONTAINER"
           for db in mercato_test mercato_pos_smoke; do
-            docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-              -c "DROP DATABASE IF EXISTS ${db};"
-            docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-              -c "CREATE DATABASE ${db};"
+            docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${db};"
+            docker exec "$PG_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${db};"
           done
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build and typecheck frontend
+        working-directory: frontend
+        run: npm run build
 
       - name: Restore backend
         run: dotnet restore backend/Mercato.Platform.sln
@@ -58,23 +65,10 @@ jobs:
       - name: Build backend
         run: dotnet build backend/Mercato.Platform.sln --configuration Release --no-restore
 
-      - name: Validate browser JavaScript syntax
+      - name: Validate localization resources
         run: |
-          set -euo pipefail
-          node --check backend/src/Mercato.Api/wwwroot/mercato-ui.js
-          node --check backend/src/Mercato.Api/wwwroot/ui-fixes.js
-          python3 -m json.tool backend/src/Mercato.Api/wwwroot/locales/fa.json >/dev/null
-          python3 -m json.tool backend/src/Mercato.Api/wwwroot/locales/en.json >/dev/null
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          for name in ('admin', 'pos'):
-              html = Path(f'backend/src/Mercato.Api/wwwroot/{name}/index.html').read_text(encoding='utf-8')
-              blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.I | re.S)
-              Path(f'/tmp/{name}-inline.js').write_text('\n'.join(blocks), encoding='utf-8')
-          PY
-          node --check /tmp/admin-inline.js
-          node --check /tmp/pos-inline.js
+          python3 -m json.tool frontend/public/locales/fa.json >/dev/null
+          python3 -m json.tool frontend/public/locales/en.json >/dev/null
 
       - name: Run POS Docker runtime smoke test
         env:
@@ -85,7 +79,6 @@ jobs:
           test -n "$PG_CONTAINER"
           NETWORK="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$PG_CONTAINER")"
           test -n "$NETWORK"
-
           docker build -f backend/Dockerfile -t mercato-api-pos-smoke:ci .
           docker run -d \
             --name mercato-pos-smoke-api \
@@ -101,20 +94,15 @@ jobs:
             -e 'BootstrapAdmin__Password=MercatoLocal123!' \
             -e BootstrapDemoData__Enabled=true \
             mercato-api-pos-smoke:ci
-
           cleanup() {
             status=$?
-            if [[ $status -ne 0 ]]; then
-              docker logs mercato-pos-smoke-api >&2 || true
-            fi
+            if [[ $status -ne 0 ]]; then docker logs mercato-pos-smoke-api >&2 || true; fi
             docker rm -f mercato-pos-smoke-api >/dev/null 2>&1 || true
             exit $status
           }
           trap cleanup EXIT
-
           bash backend/pos-http-smoke.sh
           if docker logs mercato-pos-smoke-api 2>&1 | grep -Eiq 'Unhandled exception|crit:'; then
-            echo "Mercato POS Docker runtime log contains an unexpected failure." >&2
             docker logs mercato-pos-smoke-api >&2 || true
             exit 1
           fi
