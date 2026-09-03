@@ -30,20 +30,19 @@ public sealed class MediaController : ControllerBase
             var result = await _storage.SaveProductImageAsync(stream, file.FileName, file.ContentType, cancellationToken);
             return Ok(result);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or SixLabors.ImageSharp.UnknownImageFormatException)
+        catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
     }
 
-    [HttpGet("{objectName}")]
+    [HttpGet("{**objectName}")]
     [AllowAnonymous]
     public async Task<IActionResult> Get(string objectName, CancellationToken cancellationToken)
     {
-        var decoded = Uri.UnescapeDataString(objectName);
-        if (decoded.Contains("..", StringComparison.Ordinal) || !decoded.StartsWith("products/", StringComparison.Ordinal))
+        if (objectName.Contains("..", StringComparison.Ordinal) || !objectName.StartsWith("products/", StringComparison.Ordinal))
             return BadRequest();
-        var media = await _storage.OpenAsync(decoded, cancellationToken);
+        var media = await _storage.OpenAsync(objectName, cancellationToken);
         return media is null ? NotFound() : File(media.Content, media.ContentType);
     }
 }
