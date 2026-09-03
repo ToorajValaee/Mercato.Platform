@@ -1,6 +1,7 @@
 using Mercato.NopCommerce.Core;
 using Nop.Core.Domain.Logging;
 using Nop.Core.Domain.Orders;
+using Nop.Core.Domain.Payments;
 using Nop.Services.Common;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
