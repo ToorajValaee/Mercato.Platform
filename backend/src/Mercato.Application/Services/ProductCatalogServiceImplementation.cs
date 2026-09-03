@@ -6,15 +6,18 @@ namespace Mercato.Application.Services;
 public sealed class ProductCatalogServiceImplementation : IProductCatalogService
 {
     private readonly IProductRepository _products;
+    private readonly ICategoryRepository _categories;
     private readonly IBranchRepository _branches;
     private readonly IInventoryService _inventory;
 
     public ProductCatalogServiceImplementation(
         IProductRepository products,
+        ICategoryRepository categories,
         IBranchRepository branches,
         IInventoryService inventory)
     {
         _products = products;
+        _categories = categories;
         _branches = branches;
         _inventory = inventory;
     }
@@ -34,6 +37,8 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
         }
 
         var products = await _products.GetAllAsync(cancellationToken);
+        var categories = (await _categories.GetAllAsync(cancellationToken))
+            .ToDictionary(category => category.Id, category => category.Name);
         var result = new List<CatalogProductDto>(products.Count);
 
         foreach (var product in products)
@@ -47,6 +52,10 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
                     cancellationToken);
             }
 
+            string? categoryName = null;
+            if (product.CategoryId is Guid categoryId)
+                categories.TryGetValue(categoryId, out categoryName);
+
             result.Add(new CatalogProductDto(
                 product.Id,
                 product.Name,
@@ -54,6 +63,7 @@ public sealed class ProductCatalogServiceImplementation : IProductCatalogService
                 product.ImageUrl,
                 product.SalePrice,
                 product.CategoryId,
+                categoryName,
                 product.ArtistId,
                 normalizedBranchId,
                 available));
