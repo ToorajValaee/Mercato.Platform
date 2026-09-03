@@ -1,0 +1,57 @@
+services:
+  mercato-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${MERCATO_HTTP_BIND:-127.0.0.1}:8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      MERCATO_CONNECTION_STRING: Host=postgres;Database=mercato;Username=mercato;Password=${MERCATO_POSTGRES_PASSWORD:?MERCATO_POSTGRES_PASSWORD is required}
+      Jwt__Issuer: ${MERCATO_JWT_ISSUER:-Mercato.Api}
+      Jwt__Audience: ${MERCATO_JWT_AUDIENCE:-Mercato.Client}
+      Jwt__Key: ${MERCATO_JWT_KEY:?MERCATO_JWT_KEY is required}
+      BootstrapAdmin__Email: ${MERCATO_BOOTSTRAP_ADMIN_EMAIL:?MERCATO_BOOTSTRAP_ADMIN_EMAIL is required}
+      BootstrapAdmin__Password: ${MERCATO_BOOTSTRAP_ADMIN_PASSWORD:?MERCATO_BOOTSTRAP_ADMIN_PASSWORD is required}
+      BootstrapDemoData__Enabled: "false"
+      ObjectStorage__Endpoint: minio:9000
+      ObjectStorage__AccessKey: ${MERCATO_MINIO_ACCESS_KEY:?MERCATO_MINIO_ACCESS_KEY is required}
+      ObjectStorage__SecretKey: ${MERCATO_MINIO_SECRET_KEY:?MERCATO_MINIO_SECRET_KEY is required}
+      ObjectStorage__Bucket: ${MERCATO_MINIO_BUCKET:-mercato-media}
+      ObjectStorage__Secure: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mercato
+      POSTGRES_USER: mercato
+      POSTGRES_PASSWORD: ${MERCATO_POSTGRES_PASSWORD:?MERCATO_POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mercato -d mercato"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - mercato_pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MERCATO_MINIO_ACCESS_KEY:?MERCATO_MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MERCATO_MINIO_SECRET_KEY:?MERCATO_MINIO_SECRET_KEY is required}
+    volumes:
+      - mercato_minio_data:/data
+
+volumes:
+  mercato_pgdata:
+  mercato_minio_data:
