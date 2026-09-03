@@ -75,7 +75,9 @@ psql_exec "${EXISTING_DB}" "INSERT INTO \"MigrationSmokeSentinel\" (\"Id\", \"Pa
 psql_exec "${EXISTING_DB}" 'DROP TABLE "__EFMigrationsHistory";' >/dev/null
 
 API_LOG="$(mktemp)"
-MERCATO_CONNECTION_STRING="$(connection_string "${EXISTING_DB}")" \
+EXISTING_CONNECTION_STRING="$(connection_string "${EXISTING_DB}")"
+ConnectionStrings__Mercato="${EXISTING_CONNECTION_STRING}" \
+MERCATO_CONNECTION_STRING="${EXISTING_CONNECTION_STRING}" \
 ASPNETCORE_ENVIRONMENT=Development \
 ASPNETCORE_URLS="http://127.0.0.1:${API_PORT}" \
 Jwt__Issuer=Mercato.Api \
