@@ -9,19 +9,19 @@ public sealed class UserRepository : IUserRepository
 {
     private readonly MercatoDbContext _context;
 
-    public UserRepository(MercatoDbContext context)
-    {
-        _context = context;
-    }
+    public UserRepository(MercatoDbContext context) => _context = context;
 
     public async Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default)
-        => await _context.Users.AsNoTracking().OrderBy(x => x.Email).ToListAsync(cancellationToken);
+        => await _context.Users.AsNoTracking().OrderBy(x => x.Username ?? x.Email).ToListAsync(cancellationToken);
 
     public Task<User?> GetAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.Users.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
         => _context.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
+
+    public Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
+        => _context.Users.FirstOrDefaultAsync(x => x.Username == username, cancellationToken);
 
     public Task<User?> GetByMobileNumberAsync(string mobileNumber, CancellationToken cancellationToken = default)
         => _context.Users.FirstOrDefaultAsync(x => x.MobileNumber == mobileNumber, cancellationToken);
@@ -42,8 +42,7 @@ public sealed class UserRepository : IUserRepository
     {
         var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (user is null) return false;
-        var assignments = _context.UserBranchAssignments.Where(x => x.UserId == id);
-        _context.UserBranchAssignments.RemoveRange(assignments);
+        _context.UserBranchAssignments.RemoveRange(_context.UserBranchAssignments.Where(x => x.UserId == id));
         _context.Users.Remove(user);
         await _context.SaveChangesAsync(cancellationToken);
         return true;
@@ -58,9 +57,7 @@ public sealed class UserRepository : IUserRepository
 
     public async Task SetBranchIdsAsync(Guid userId, IReadOnlyCollection<Guid> branchIds, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.UserBranchAssignments
-            .Where(x => x.UserId == userId)
-            .ToListAsync(cancellationToken);
+        var existing = await _context.UserBranchAssignments.Where(x => x.UserId == userId).ToListAsync(cancellationToken);
         _context.UserBranchAssignments.RemoveRange(existing);
         foreach (var branchId in branchIds.Distinct())
             _context.UserBranchAssignments.Add(new UserBranchAssignment { UserId = userId, BranchId = branchId });
