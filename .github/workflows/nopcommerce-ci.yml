@@ -83,8 +83,15 @@ jobs:
           NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
         run: bash integrations/nopCommerce/runtime-config-smoke.sh
 
+      - name: Run nopCommerce product and inventory sync smoke test
+        id: nop_sync_runtime
+        env:
+          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+          NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
+        run: bash integrations/nopCommerce/runtime-sync-smoke.sh
+
       - name: Diagnose nopCommerce runtime failure
-        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure')
+        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure' || steps.nop_sync_runtime.outcome == 'failure')
         run: bash integrations/nopCommerce/runtime-diagnostics.sh
 
       - name: Stage nopCommerce plugin packages
