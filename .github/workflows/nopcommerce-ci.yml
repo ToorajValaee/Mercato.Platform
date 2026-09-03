@@ -97,8 +97,15 @@ jobs:
           NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
         run: bash integrations/nopCommerce/runtime-sync-smoke.sh
 
+      - name: Run nopCommerce paid order sync retry smoke test
+        id: nop_order_sync_runtime
+        env:
+          NOP_ROOT: ${{ github.workspace }}/_nopCommerce
+          NOP_DB_CONNECTION_STRING: Host=127.0.0.1;Port=55432;Database=nopcommerce;Username=postgres;Password=postgres
+        run: bash integrations/nopCommerce/runtime-order-sync-smoke.sh
+
       - name: Diagnose nopCommerce runtime failure
-        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure' || steps.nop_sync_runtime.outcome == 'failure')
+        if: failure() && (steps.nop_install_runtime.outcome == 'failure' || steps.nop_storefront_runtime.outcome == 'failure' || steps.nop_sync_runtime.outcome == 'failure' || steps.nop_order_sync_runtime.outcome == 'failure')
         continue-on-error: true
         run: bash integrations/nopCommerce/runtime-diagnostics.sh
 
