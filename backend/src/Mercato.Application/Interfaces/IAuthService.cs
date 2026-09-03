@@ -3,7 +3,7 @@ namespace Mercato.Application.Interfaces;
 public sealed record AuthenticatedUser(
     Guid Id,
     string Email,
-    string? MobileNumber,
+    string? Username,
     string Role,
     bool CanAccessBackOffice);
 
