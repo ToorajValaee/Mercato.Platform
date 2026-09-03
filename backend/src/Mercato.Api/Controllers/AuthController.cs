@@ -23,40 +23,22 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest();
-
-        try
-        {
-            await _authService.RegisterAsync(request.Email, request.Password, cancellationToken);
-            return Ok();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(ex.Message);
-        }
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password)) return BadRequest();
+        try { await _authService.RegisterAsync(request.Email, request.Password, cancellationToken); return Ok(); }
+        catch (InvalidOperationException ex) { return Conflict(ex.Message); }
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest();
-
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password)) return BadRequest();
         try
         {
             var user = await _authService.LoginAsync(request.Email, request.Password, cancellationToken);
             var token = CreateToken(user);
-            return Ok(new
-            {
-                token,
-                user = new { user.Id, user.Email, user.MobileNumber, user.Role, user.CanAccessBackOffice }
-            });
+            return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.Role, user.CanAccessBackOffice } });
         }
-        catch (UnauthorizedAccessException)
-        {
-            return Unauthorized();
-        }
+        catch (UnauthorizedAccessException) { return Unauthorized(); }
     }
 
     private string CreateToken(AuthenticatedUser user)
@@ -65,35 +47,27 @@ public class AuthController : ControllerBase
         var issuer = jwt["Issuer"] ?? throw new InvalidOperationException("JWT issuer is not configured.");
         var audience = jwt["Audience"] ?? throw new InvalidOperationException("JWT audience is not configured.");
         var key = jwt["Key"] ?? throw new InvalidOperationException("JWT signing key is not configured.");
-        if (key.Length < 32)
-            throw new InvalidOperationException("JWT signing key must be at least 32 characters.");
+        if (key.Length < 32) throw new InvalidOperationException("JWT signing key must be at least 32 characters.");
 
+        var displayIdentity = string.IsNullOrWhiteSpace(user.Username) ? user.Email : user.Username;
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString("D")),
             new(ClaimTypes.NameIdentifier, user.Id.ToString("D")),
-            new(ClaimTypes.Name, string.IsNullOrWhiteSpace(user.MobileNumber) ? user.Email : user.MobileNumber),
-            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, displayIdentity),
             new(ClaimTypes.Role, user.Role),
             new("backoffice", user.CanAccessBackOffice ? "true" : "false")
         };
-        if (!string.IsNullOrWhiteSpace(user.MobileNumber))
-            claims.Add(new Claim("mobile_number", user.MobileNumber));
+        if (!string.IsNullOrWhiteSpace(user.Email)) claims.Add(new Claim(ClaimTypes.Email, user.Email));
+        if (!string.IsNullOrWhiteSpace(user.Username)) claims.Add(new Claim("username", user.Username));
 
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
-        var token = new JwtSecurityToken(
-            issuer,
-            audience,
-            claims,
-            notBefore: DateTime.UtcNow,
-            expires: DateTime.UtcNow.AddHours(12),
-            signingCredentials: credentials);
-
+        var token = new JwtSecurityToken(issuer, audience, claims, notBefore: DateTime.UtcNow, expires: DateTime.UtcNow.AddHours(12), signingCredentials: credentials);
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    // Kept as Email for wire compatibility; the value may be an email address or mobile number.
+    // Email remains the JSON property name for compatibility. It carries the configured login identifier.
     public record LoginRequest(string Email, string Password);
     public record RegisterRequest(string Email, string Password);
 }
