@@ -2,11 +2,11 @@
   "Group": "Mercato",
   "FriendlyName": "Mercato Order Sync",
   "SystemName": "Mercato.OrderSync",
-  "Version": "4.90.7.2",
+  "Version": "4.90.7.3",
   "SupportedVersions": [ "4.90" ],
   "Author": "Tooraj Valaee",
   "DisplayOrder": 5,
   "FileName": "Nop.Plugin.Mercato.OrderSync.dll",
-  "Description": "Synchronizes completed nopCommerce orders into Mercato using retry-safe order import.",
+  "Description": "Synchronizes paid nopCommerce orders into Mercato immediately and retries unsynchronized paid orders using Mercato's idempotent checkout pipeline.",
   "DependsOnSystemNames": [ "Mercato.Connector" ]
 }
